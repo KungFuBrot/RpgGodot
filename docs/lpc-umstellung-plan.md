@@ -9,7 +9,7 @@ deren Weitergabe ausdrücklich erlaubt ist.
 
 LPC-Grafiken sind doppelt lizenziert: **CC-BY-SA 3.0 und GPLv3**. Beide erlauben
 die Weitergabe der Dateien, worauf es hier ankommt: Unsere Grafiken stecken in
-`web_build/index.pck` und liegen im öffentlichen Repo, das ist rechtlich
+`web/index.pck` und liegen im öffentlichen Repo, das ist rechtlich
 Verbreitung. Daran sind Aekashics und Pipoya im Juli gescheitert.
 
 Daraus folgen vier Pflichten, die vor dem ersten Commit von Assets erfüllt sein

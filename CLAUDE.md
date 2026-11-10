@@ -117,7 +117,7 @@ godot --headless --quit --path .            # Spielstart kompiliert alle Skripte
 # (headless schlagen nur die save_png-Screenshots fehl — das ist ok):
 $env:SPELLSHOT = "$env:TEMP\shots"; godot --headless --path .
 
-# Web-Export (Ziel ../web_build, wird von GitHub Pages ausgeliefert):
+# Web-Export (Ziel web/, wird per GitHub Action auf GitHub Pages ausgeliefert):
 godot --headless --path . --export-release "Web"
 ```
 
@@ -129,5 +129,5 @@ godot --headless --path . --export-release "Web"
 
 ## Nicht lesen / nicht anfassen
 
-- `../web_build/*` (generierte Binaries — nur per Export erzeugen, nie editieren)
+- `web/*` (generierte Binaries — nur per Export erzeugen, nie editieren)
 - `.godot/` (Cache), `assets/dtii`, `assets/kenney` (CC0-Packs, fertig)

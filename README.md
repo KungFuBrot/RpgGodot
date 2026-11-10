@@ -1,5 +1,7 @@
 # Fable RPG (Godot)
 
+> Hobbyprojekt. **Im Browser spielen:** https://kungfubrot.github.io/RpgGodot/
+
 Ein Mini-JRPG im Stil von *Final Fantasy VI / Octopath Traveler*, gebaut mit **Godot 4.3+**.
 Alles ist prozedural: Pixel-Art, Karten, Musik und Soundeffekte werden zur Laufzeit
 per GDScript erzeugt — das Projekt braucht **keine einzigen Binär-Assets**.
