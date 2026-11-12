@@ -777,6 +777,12 @@ static func pose_at(anim: String, frame: int) -> Dictionary:
 ## 2D-Tabelle — die 3D-Streifen haben mehr Bilder, weil Zwischenbilder dort
 ## nichts kosten.
 static func anim_frames(anim: String, id := "") -> int:
+	# LPC-Blaetter haben eigene Laengen — wer sie zeichnet, muss auch nach
+	# ihnen takten, sonst springt der Zyklus beim Umlauf des Zaehlers.
+	if id != "" and LpcMock.active():
+		var l := LpcMock.hero_frames(id, anim)
+		if l > 0:
+			return l
 	if id != "":
 		var n := baked_frames(id, BAKED_ANIM.get(anim, "idle"))
 		if n > 0:
@@ -1015,6 +1021,10 @@ const MON_FORCE := {
 
 ## Frameanzahl einer Kreaturen-Animation. Mit `id` gilt der gebackene Streifen.
 static func mon_frames(anim: String, id := "") -> int:
+	if id != "" and LpcMock.active():
+		var l := LpcMock.monster_anim_frames(id, anim)
+		if l > 0:
+			return l
 	if id != "":
 		var n := baked_frames(id, "attack" if anim == "taunt" else anim)
 		if n > 0:

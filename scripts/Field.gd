@@ -1010,7 +1010,9 @@ func _process(delta: float) -> void:
 	anim_accum += delta
 	if anim_accum >= 0.14:
 		anim_accum -= 0.14
-		anim_frame = (anim_frame + 1) % 16
+		# 18 = gemeinsames Vielfaches von Gehen (9 Bilder) und Stehen (2 Bilder)
+		# der LPC-Blaetter; mit 16 sprang der Gehzyklus beim Umlauf.
+		anim_frame = (anim_frame + 1) % 18
 		if is_instance_valid(player):
 			_update_sprites()
 	if state == "move" and not moving:
@@ -1133,6 +1135,9 @@ const GRADES := {
 	"dungeon": [Color(0.60, 0.95, 0.35, 0.08), Color(0.04, 0.12, 0.03, 0.20)],
 	"dungeon2": [Color(1.0, 0.88, 0.50, 0.09), Color(0.12, 0.08, 0.02, 0.16)],
 	"dungeon3": [Color(1.0, 0.45, 0.30, 0.08), Color(0.10, 0.02, 0.02, 0.20)],
+	# Die Leere: kaltes, entsättigtes Grau statt des warmen Weltkarten-Tons,
+	# auf den sie mangels Eintrag bisher zurückfiel.
+	"dungeon4": [Color(0.72, 0.78, 0.92, 0.07), Color(0.05, 0.06, 0.12, 0.18)],
 }
 
 func _build_ui() -> void:

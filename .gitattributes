@@ -11,3 +11,5 @@
 *.wav binary
 *.ogg binary
 *.xlsx binary
+*.import text eol=lf
+*.uid text eol=lf

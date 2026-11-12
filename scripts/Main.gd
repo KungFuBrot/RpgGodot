@@ -73,6 +73,9 @@ func _shot_tour() -> void:
 	goto_map("dungeon3", "entrance")
 	await get_tree().create_timer(2.0).timeout
 	_snap("dungeon3")
+	goto_map("dungeon4", "entrance")
+	await get_tree().create_timer(2.0).timeout
+	_snap("dungeon4")
 	# Berührungs-Test: neben den Boss stellen und hineinlaufen — muss den Kampf starten.
 	goto_map("dungeon", "", Vector2i(17, 10))
 	await get_tree().create_timer(1.5).timeout
@@ -97,6 +100,12 @@ func _shot_tour() -> void:
 	start_battle(["boss3"], "dungeon3", Vector2i(4, 10))
 	await get_tree().create_timer(7.0).timeout
 	_snap("battle_boss3")
+	start_battle(["hohlgaenger", "grauschemen", "namenlose"], "dungeon4", Vector2i(4, 10))
+	await get_tree().create_timer(2.5).timeout
+	_snap("battle_void")
+	start_battle(["boss4"], "dungeon4", Vector2i(4, 10))
+	await get_tree().create_timer(7.0).timeout
+	_snap("battle_boss4")
 	get_tree().quit()
 
 func _snap(shot_name: String) -> void:

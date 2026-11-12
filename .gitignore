@@ -1,3 +1,6 @@
 # Godot-Cache/Editor-Dateien
 .godot/
 *.tmp
+
+# Screenshot-Ablage der Debug-Touren (SHOT/SPELLSHOT/BOSSSHOT)
+shots/

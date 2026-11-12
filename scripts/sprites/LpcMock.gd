@@ -1,11 +1,10 @@
 class_name LpcMock
 extends RefCounted
-## Mock-Schalter fuer die LPC-Assets (siehe docs/lpc-umstellung-plan.md).
-##
-## Nur zum Vorzeigen: mit gesetzter Umgebungsvariable LPCMOCK=1 zeichnet Helen
-## als LPC-Figur und der Schlammschleim als LPC-Monster, alles andere bleibt wie
-## es ist. Ohne die Variable ruehrt diese Datei das Spiel nicht an — der
-## Grafikstil wird erst nach Freigabe umgestellt (Regel in CLAUDE.md).
+## LPC-Figuren (siehe docs/lpc-umstellung-plan.md) — seit der Freigabe der
+## Standard: alle Helden, Dorfbewohner, 13 Monster und 4 Bosse kommen von hier.
+## Abschaltbar ueber den Menuepunkt "Art preview (LPC)" (`GameState.lpc_preview`);
+## dann greift der alte Weg ueber RigFactory. Der Klassenname ist ein Ueberbleibsel
+## aus der Mock-Phase.
 ##
 ## LPC-Blattaufbau: Zeilen sind Blickrichtungen (0 hoch, 1 links, 2 runter,
 ## 3 rechts), Spalten die Einzelbilder. Wir nehmen Zeile 1 (links), weil die
@@ -186,6 +185,36 @@ static func monster(id: String, frame: int, anim := "idle") -> Texture2D:
 ## Bilderzahl des Streifens (0, wenn der Gegner nicht umgestellt ist).
 static func monster_frames(id: String) -> int:
 	return int(ENEMY_FRAMES.get(id, 0))
+
+## Bilderzahl einer Heldenpose, wie `hero` sie tatsaechlich durchlaeuft
+## (0 = Figur oder Pose nicht abgebildet). Gehaltene Posen zaehlen als ein Bild.
+## Der Kampf taktet danach — frueher lief der Zaehler nach der Laenge der
+## rig3d-Streifen (z. B. 22 beim Gehen) und sprang deshalb mitten im
+## 9-Bilder-Zyklus zurueck.
+static func hero_frames(id: String, anim: String) -> int:
+	if not HERO_FILES.has(id):
+		return 0
+	var over: Dictionary = HERO_OVERRIDE.get(id, {})
+	var d: Dictionary = over.get(anim, HERO_ANIM.get(anim, {}))
+	if d.is_empty():
+		return 0
+	return 1 if int(d["hold"]) >= 0 else int(d["cols"])
+
+## Bilderzahl einer Gegner-Animation: Angriff und Aufbaeumen haben eigene
+## Blaetter, alles andere laeuft auf dem Leerlauf-Streifen.
+static func monster_anim_frames(id: String, anim: String) -> int:
+	if not ENEMY_FRAMES.has(id):
+		return 0
+	var idle_sheet := _sheet("enemies/%s.png" % id)
+	if idle_sheet == null:
+		return 0
+	var n_idle: int = maxi(int(ENEMY_FRAMES[id]), 1)
+	if anim == "attack" or anim == "roar":
+		var extra := _sheet("enemies/%s_%s.png" % [id, anim])
+		if extra != null:
+			var w: int = maxi(int(idle_sheet.get_width() / n_idle), 1)
+			return maxi(int(round(float(extra.get_width()) / float(w))), 1)
+	return n_idle
 
 ## Figur auf der Karte. dir: "side" | "up" | "down".
 static func field(id: String, walking: bool, frame: int, dir: String) -> Texture2D:

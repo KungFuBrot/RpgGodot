@@ -1,17 +1,24 @@
 # RpgGodot — Mini-JRPG (Godot 4)
 
 Rundenbasiertes Mini-JRPG im Stil von FF VI / Octopath. Läuft als Web-Export auf
-GitHub Pages. Alles ist prozedural per Code erzeugt — es gibt nur eine Szene
-(`Main.tscn`), keine Editor-Ressourcen.
+GitHub Pages. Aufbau, Karten, Effekte und UI entstehen per Code — es gibt nur
+eine Szene (`Main.tscn`), keine Editor-Ressourcen. Figuren kommen aus
+LPC-Blättern (`assets/lpc/`), Kacheln und Partikel aus DTII und Kenney.
+
+**Laufender Umbau:** Optik-Aufwertung und fordernde Bosse in Stufen 0–7, siehe
+`docs/optik-und-bosse-plan.md` (Stand der Stufen steht dort ganz oben).
 
 ## Konventionen
 
 - **Spielertexte: Englisch.** Code-Kommentare: Deutsch. Beides beibehalten.
 - Typisiertes GDScript (`:=`, `->`), Tabs, LF-Zeilenenden.
-- Keine neuen Assets/Szenen anlegen — Grafik entsteht in `SpriteFactory`,
-  Musik/SFX in `AudioManager`, UI per Code.
+- Keine neuen Szenen anlegen. Neue Assets nur aus freien Quellen (CC0,
+  CC-BY-SA) unter `assets/<quelle>/` mit eigener `LICENSE.txt` und Eintrag im
+  Credits-Bildschirm (`Title.gd`); bei CC-BY-SA jede*n Autor*in namentlich.
 - ACHTUNG Grafikstil: Stil-Umbauten nur nach In-Game-Mock und Freigabe
   (mehrere Anläufe wurden abgelehnt, siehe `docs/ki-grafikstil-plan.md`).
+  Der LPC-Figurenstil ist freigegeben und bleibt; große Umbauten laufen zuerst
+  hinter einem Menüschalter (Muster: `GameState.lpc_preview`).
 
 ## Dateikarte — gezielt lesen statt alles laden
 
@@ -55,7 +62,21 @@ Neue geteilte Helfer gehören nach `BattleFx` (visuell) bzw. `BattleBase` (Zusta
 Gegner, Props). Alle Aufrufe von außen laufen über `SpriteFactory.*`
 (statische Vererbung).
 
-### 3D-zu-Pixel-Pipeline (`scripts/proto/`) — Quelle aller Figuren
+### Figuren: LPC ist Standard (`scripts/sprites/LpcMock.gd`)
+
+Alle Helden, Dorfbewohner, 13 Monster und 4 Bosse werden aus LPC-Blättern
+geschnitten (`assets/lpc/heroes`, `assets/lpc/enemies`; Zelle 128 px = LPC 64 px
+doppelt). `SpriteFactoryChars.field_char` / `hero_battle_frame` und
+`SpriteFactory.enemy_frame` fragen zuerst `LpcMock`; nur bei abgeschaltetem
+Menüschalter oder fehlendem Blatt greift `RigFactory`. Die Bildzahl je Pose
+liefern `LpcMock.hero_frames` / `monster_anim_frames` (erreichbar über
+`RigFactory.anim_frames` / `mon_frames`). Gegner haben nur Leerlauf-, Angriffs-
+und (Bosse) Brüll-Blätter; Treffer und Sturz sind Verformung per Tween.
+Beschwörungen sind prozedural (`SpriteFactory.gd`).
+
+**Alles Folgende zu `proto/` und `RigFactory` beschreibt nur noch den Rückfall.**
+
+### 3D-zu-Pixel-Pipeline (`scripts/proto/`) — Rückfall ohne LPC
 
 Seit dem Stilwechsel werden Figuren **nicht mehr gezeichnet**, sondern als
 3D-Gelenkskelett modelliert, orthografisch sehr klein und ohne Kantenglättung
@@ -106,7 +127,9 @@ Untergrund durchläuft.
 
 ## Befehle
 
-Godot-Binary: `C:\Users\Kungf\AppData\Local\Temp\godot_47\Godot_v4.7-stable_win64_console.exe`
+Godot-Binary (winget, unten kurz `godot`):
+`%LOCALAPPDATA%\Microsoft\WinGet\Packages\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\Godot_v4.7-stable_win64_console.exe`
+Nach frischem Klon zuerst `--headless --editor --quit`, sonst fehlt `.godot/`.
 
 ```powershell
 # Skript-/Klassencheck (nach Umbauten immer ausführen):
@@ -117,6 +140,12 @@ godot --headless --quit --path .            # Spielstart kompiliert alle Skripte
 # (headless schlagen nur die save_png-Screenshots fehl — das ist ok):
 $env:SPELLSHOT = "$env:TEMP\shots"; godot --headless --path .
 
+# Bildtour MIT Fenster (headless kann den Viewport nicht speichern):
+# Titel, Intro, alle Karten, Arenen und Bosse -> shots/now/
+$env:SHOT = "$PWD\shots\now"; godot --path .
+# Vorher/Nachher-Montagen gegen shots/baseline/ + Anteil geänderter Pixel:
+godot --headless --path . --script tools/compare_shots.gd
+
 # Web-Export (Ziel web/, wird per GitHub Action auf GitHub Pages ausgeliefert):
 godot --headless --path . --export-release "Web"
 ```
@@ -125,9 +154,12 @@ godot --headless --path . --export-release "Web"
 
 1. Headless-Check (siehe oben) — muss fehlerfrei sein.
 2. Web-Build exportieren.
-3. Committen (deutsche Commit-Messages, Muster: `Fix:`/`Feature:`/`Web-Build: … exportiert`) und pushen.
+3. Committen (deutsche Commit-Messages, Muster: `Fix:`/`Feature:`/`Web-Build: … exportiert`).
+4. Pushen auf `master` löst den öffentlichen Pages-Deploy aus — bei sichtbaren
+   Änderungen erst nach Freigabe der Vorher/Nachher-Bilder.
 
 ## Nicht lesen / nicht anfassen
 
 - `web/*` (generierte Binaries — nur per Export erzeugen, nie editieren)
 - `.godot/` (Cache), `assets/dtii`, `assets/kenney` (CC0-Packs, fertig)
+- `shots/` (Screenshot-Ablage der Debug-Touren, nicht im Repo)
