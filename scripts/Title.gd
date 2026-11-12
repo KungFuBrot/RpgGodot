@@ -34,6 +34,7 @@ const CREDIT_LINES := [
 	["Tiles, props & particles", 16, "sec"],
 	["\"Dungeon Tileset II\" by 0x72, CC0", 14, "body"],
 	["\"Roguelike/RPG Pack\" and \"Particle Pack\" by Kenney, CC0", 14, "body"],
+	["Battle backdrops by Luis Zuno (ansimuz), CC0", 14, "body"],
 	["Music & sound", 16, "sec"],
 	["\"JRPG Music Packs 1-5\" by Juhani Junkala (SubspaceAudio), CC0", 14, "body"],
 	["Sound effects by Kenney and artisticdude, CC0", 14, "body"],
@@ -52,6 +53,7 @@ var credits_panel: PanelContainer
 var pad_label: Label
 var debug_label: Label
 var style_label: Label
+var backdrop_label: Label
 var settings_index := 0
 var ui: CanvasLayer
 var _locked := false
@@ -368,6 +370,10 @@ func _build_ui() -> void:
 	style_label.add_theme_font_size_override("font_size", 18)
 	style_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	svb.add_child(style_label)
+	backdrop_label = Label.new()
+	backdrop_label.add_theme_font_size_override("font_size", 18)
+	backdrop_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	svb.add_child(backdrop_label)
 	var shint := Label.new()
 	shint.text = "↑↓: Select   ·   Z: Toggle   ·   X: Back"
 	shint.add_theme_font_size_override("font_size", 15)
@@ -434,6 +440,10 @@ func _refresh_settings_labels() -> void:
 	style_label.text = "%sArt preview (LPC):  %s" % [scur, "ON" if GameState.lpc_preview else "OFF"]
 	style_label.add_theme_color_override("font_color",
 		Color(0.55, 1.0, 0.6) if GameState.lpc_preview else Color(1.0, 0.55, 0.5))
+	var bcur := "> " if settings_index == 3 else "   "
+	backdrop_label.text = "%sPainted battle backdrops:  %s" % [bcur, "ON" if GameState.backdrop_preview else "OFF"]
+	backdrop_label.add_theme_color_override("font_color",
+		Color(0.55, 1.0, 0.6) if GameState.backdrop_preview else Color(1.0, 0.55, 0.5))
 
 func _label(text: String, size: int, color: Color, y: float) -> Label:
 	var l := Label.new()
@@ -472,7 +482,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if settings_panel.visible:
 		if event.is_action_pressed("move_up") or event.is_action_pressed("move_down"):
 			AudioManager.play_sfx("menu")
-			settings_index = (settings_index + 1) % 3
+			var step := -1 if event.is_action_pressed("move_up") else 1
+			settings_index = (settings_index + step + 4) % 4
 			_refresh_settings_labels()
 		elif event.is_action_pressed("confirm"):
 			# Ausgewählte Einstellung umschalten (sofort angewendet + gespeichert)
@@ -481,8 +492,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				GameState.set_touch_pad(not GameState.touch_pad)
 			elif settings_index == 1:
 				GameState.set_debug_mode(not GameState.debug_mode)
-			else:
+			elif settings_index == 2:
 				GameState.set_lpc_preview(not GameState.lpc_preview)
+			else:
+				GameState.set_backdrop_preview(not GameState.backdrop_preview)
 			_refresh_settings_labels()
 		elif event.is_action_pressed("cancel"):
 			AudioManager.play_sfx("menu")

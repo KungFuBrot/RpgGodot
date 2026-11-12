@@ -621,11 +621,11 @@ func _camera_idle() -> void:
 	cam_idle = create_tween().set_loops()
 	cam_idle.tween_property(cam, "zoom", Vector2(1.015, 1.015), 6.0) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	cam_idle.parallel().tween_property(cam, "position", Vector2(484, 268), 6.0) \
+	cam_idle.parallel().tween_property(cam, "position", Vector2(496, 266), 6.0) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	cam_idle.tween_property(cam, "zoom", Vector2.ONE, 6.0) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	cam_idle.parallel().tween_property(cam, "position", Vector2(480, 270), 6.0) \
+	cam_idle.parallel().tween_property(cam, "position", Vector2(466, 271), 6.0) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 ## Kurzer Kamera-Stoß auf einen Fokuspunkt — Zoom-Punch für große Momente.

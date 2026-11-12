@@ -337,3 +337,46 @@ static func unit_material(rim := Color(0, 0, 0, 0)) -> ShaderMaterial:
 	m.shader = _unit_shader
 	m.set_shader_parameter("rim_col", rim)
 	return m
+
+# ---------- Kulissen-Shader (Kampf) ----------
+# Färbt eine Hintergrund-Ebene auf die Farbleiter der Arena um (Helligkeit ->
+# dunkel/mittel/hell), damit Ebenen aus verschiedenen Quellen wie aus einem
+# Guss wirken. "keep" lässt einen Teil der Originalfarbe stehen, "depth"
+# mischt ferne Ebenen in den Dunst ("fog").
+const BACKDROP_SHADER_CODE := "
+shader_type canvas_item;
+uniform vec4 c_dark : source_color = vec4(0.02, 0.05, 0.03, 1.0);
+uniform vec4 c_mid : source_color = vec4(0.1, 0.3, 0.15, 1.0);
+uniform vec4 c_light : source_color = vec4(0.6, 1.0, 0.5, 1.0);
+uniform vec4 fog : source_color = vec4(0.1, 0.2, 0.1, 1.0);
+uniform float keep : hint_range(0.0, 1.0) = 0.3;
+uniform float depth : hint_range(0.0, 1.0) = 0.0;
+uniform float gain = 1.0;
+
+void fragment() {
+	vec4 t = texture(TEXTURE, UV);
+	float l = dot(t.rgb, vec3(0.299, 0.587, 0.114));
+	vec3 g = l < 0.5 ? mix(c_dark.rgb, c_mid.rgb, l * 2.0) : mix(c_mid.rgb, c_light.rgb, (l - 0.5) * 2.0);
+	vec3 c = mix(g, t.rgb, keep) * gain;
+	c = mix(c, fog.rgb, depth);
+	COLOR = vec4(c, t.a);
+}
+"
+
+static var _backdrop_shader: Shader
+
+static func backdrop_material(dark: Color, mid: Color, light: Color, fog: Color,
+		keep: float, depth: float, gain := 1.0) -> ShaderMaterial:
+	if _backdrop_shader == null:
+		_backdrop_shader = Shader.new()
+		_backdrop_shader.code = BACKDROP_SHADER_CODE
+	var m := ShaderMaterial.new()
+	m.shader = _backdrop_shader
+	m.set_shader_parameter("c_dark", dark)
+	m.set_shader_parameter("c_mid", mid)
+	m.set_shader_parameter("c_light", light)
+	m.set_shader_parameter("fog", fog)
+	m.set_shader_parameter("keep", keep)
+	m.set_shader_parameter("depth", depth)
+	m.set_shader_parameter("gain", gain)
+	return m

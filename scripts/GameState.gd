@@ -209,6 +209,8 @@ var debug_mode := false  # schaltet alle Fähigkeiten und Dungeons frei — Stan
 ## Als Schalter im Menü, damit man sie auch auf dem Handy ansehen kann — im
 ## Web-Export gibt es keine Umgebungsvariablen.
 var lpc_preview := true
+## Gemalte Mehrebenen-Kulissen im Kampf (Stufe 3). Aus = alte Polygon-Kulisse.
+var backdrop_preview := true
 
 func _ready() -> void:
 	_load_settings()
@@ -220,6 +222,7 @@ func _load_settings() -> void:
 		touch_pad = cfg.get_value("input", "touch_pad", true)
 		debug_mode = cfg.get_value("debug", "enabled", false)
 		lpc_preview = cfg.get_value("style", "lpc_preview", true)
+		backdrop_preview = cfg.get_value("style", "backdrop_preview", true)
 
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -227,6 +230,7 @@ func _save_settings() -> void:
 	cfg.set_value("input", "touch_pad", touch_pad)
 	cfg.set_value("debug", "enabled", debug_mode)
 	cfg.set_value("style", "lpc_preview", lpc_preview)
+	cfg.set_value("style", "backdrop_preview", backdrop_preview)
 	cfg.save("user://settings.cfg")
 
 func set_touch_pad(value: bool) -> void:
@@ -243,6 +247,10 @@ func set_debug_mode(value: bool) -> void:
 
 func set_lpc_preview(value: bool) -> void:
 	lpc_preview = value
+	_save_settings()
+
+func set_backdrop_preview(value: bool) -> void:
+	backdrop_preview = value
 	_save_settings()
 
 ## Kompletter Neustart (nach dem Abspann): alles zurück auf Anfang.

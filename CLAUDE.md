@@ -67,6 +67,17 @@ Neue geteilte Helfer gehören nach `BattleFx` (visuell) bzw. `BattleBase` (Zusta
 - Nur schwebende Gegner (`BattleStage.FLOATERS`) und Bosse wippen noch;
   alle anderen stehen (`bob_amp` 0).
 
+### Kampfkulissen (`BattleStage.BACKDROPS`)
+
+Je Arena-Thema eine Liste gemalter Ebenen aus `assets/backdrops/` (CC0, Luis
+Zuno). `_build_backdrop` kachelt sie über die Bildbreite,
+`Fx.backdrop_material` färbt sie per Farbleiter auf das Thema um (`keep`,
+`depth`, `gain` je Ebene), `_process` führt sie als Parallax der Kamera
+nach. Abschaltbar über `GameState.backdrop_preview` (dann die alte
+Polygon-Kulisse); „void" hat keine Ebenen und bleibt prozedural. Bilder immer
+mit `--rendering-method gl_compatibility` beurteilen — so sieht es im Web aus
+(deutlich heller als Forward+ am Desktop).
+
 ### Boss-Mechanik und Schwierigkeit
 
 - Stellschrauben stehen zentral in `GameState.BOSS_TUNING` / `MOB_TUNING`
@@ -177,7 +188,8 @@ $env:AUTOBATTLE = "all"; godot --headless --path .
 
 # Bildtour MIT Fenster (headless kann den Viewport nicht speichern):
 # Titel, Intro, alle Karten, Arenen und Bosse -> shots/now/
-$env:SHOT = "$PWD\shots\now"; godot --path .
+# (gl_compatibility = derselbe Renderer wie im Web-Build)
+$env:SHOT = "$PWD\shots\now"; godot --rendering-method gl_compatibility --path .
 # Vorher/Nachher-Montagen gegen shots/baseline/ + Anteil geänderter Pixel:
 godot --headless --path . --script tools/compare_shots.gd
 

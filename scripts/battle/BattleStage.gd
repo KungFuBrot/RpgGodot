@@ -212,21 +212,30 @@ func _build_scene() -> void:
 	bg.texture = SpriteFactory.gradient(8, 64, pal["bg_top"], pal["bg_bottom"])
 	bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	bg.centered = false
-	bg.scale = Vector2(960.0 / 8, 540.0 / 64)
+	# Alle bildfüllenden Flächen ragen 120 px über den Rand: die Kamera
+	# schwenkt und zoomt, sonst blitzt an den Kanten der Hintergrund durch.
+	bg.position = Vector2(-120, -80)
+	bg.scale = Vector2(1200.0 / 8, 700.0 / 64)
 	bg.z_index = -20
 	add_child(bg)
+	# Neue Kulisse (Stufe 3): gemalte Mehrebenen-Hintergründe mit echtem
+	# Parallax. Abschaltbar im Titelmenü (GameState.backdrop_preview); Die Leere
+	# bleibt prozedural.
+	var new_backdrop: bool = GameState.backdrop_preview and BACKDROPS.has(arena_theme)
+	var keep_sil: Array = BACKDROPS[arena_theme].get("silhouettes", []) if new_backdrop else []
 	# Felswand mit echter Struktur hinter den Silhouetten: FastNoiseLite-FBM
 	# statt flachem Verlauf — die Fackeln haben damit etwas zu beleuchten.
-	var wall := Sprite2D.new()
-	wall.texture = SpriteFactory.noise_texture(240, 100,
-		pal["bg_bottom"], (pal["stal"] as Color).lightened(0.18), 7, 0.06)
-	wall.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	wall.centered = false
-	wall.scale = Vector2(4, 4)
-	wall.position = Vector2(0, -20)
-	wall.z_index = -19
-	wall.modulate = Color(1, 1, 1, 0.62)
-	add_child(wall)
+	if not new_backdrop:
+		var wall := Sprite2D.new()
+		wall.texture = SpriteFactory.noise_texture(240, 100,
+			pal["bg_bottom"], (pal["stal"] as Color).lightened(0.18), 7, 0.06)
+		wall.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		wall.centered = false
+		wall.scale = Vector2(4, 4)
+		wall.position = Vector2(0, -20)
+		wall.z_index = -19
+		wall.modulate = Color(1, 1, 1, 0.62)
+		add_child(wall)
 	# Drei Tiefen-Silhouetten-Ebenen mit langsamem Sinus-Drift: ferne Ebene
 	# hell/dunstig Richtung Himmel, nahe Ebene dunkel — Faux-Parallax.
 	var stal_col: Color = pal["stal"]
@@ -239,6 +248,8 @@ func _build_scene() -> void:
 			"col": stal_col.darkened(0.4), "amp": 14.0, "dur": 9.0},
 	]
 	for li in layer_specs.size():
+		if new_backdrop and not (li in keep_sil):
+			continue
 		var spec: Dictionary = layer_specs[li]
 		var layer := Node2D.new()
 		layer.z_index = spec["z"]
@@ -261,14 +272,17 @@ func _build_scene() -> void:
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		drift.tween_property(layer, "position:x", -spec["amp"], spec["dur"] * 0.5) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_add_sky(pal)
+	if new_backdrop:
+		_build_backdrop(pal)
+	else:
+		_add_sky(pal)
 	# Boden mit Verlauf + Steine als Dekor
 	var floor_s := Sprite2D.new()
 	floor_s.texture = SpriteFactory.gradient(8, 32, pal["floor_top"], pal["floor_bottom"])
 	floor_s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	floor_s.centered = false
-	floor_s.position = Vector2(0, 340)
-	floor_s.scale = Vector2(960.0 / 8, 200.0 / 32)
+	floor_s.position = Vector2(-120, 340)
+	floor_s.scale = Vector2(1200.0 / 8, 280.0 / 32)
 	floor_s.z_index = -12
 	add_child(floor_s)
 	# Bodenstruktur: felsiges Rauschen über dem Verlauf (halbtransparent)
@@ -278,8 +292,8 @@ func _build_scene() -> void:
 		(pal["floor_top"] as Color).lightened(0.08), 11, 0.09)
 	floor_tex.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	floor_tex.centered = false
-	floor_tex.position = Vector2(0, 340)
-	floor_tex.scale = Vector2(4, 4)
+	floor_tex.position = Vector2(-120, 340)
+	floor_tex.scale = Vector2(5, 5.6)
 	floor_tex.z_index = -12
 	floor_tex.modulate = Color(1, 1, 1, 0.55)
 	add_child(floor_tex)
@@ -1278,3 +1292,99 @@ func _make_enemy(id: String, home: Vector2) -> Dictionary:
 		# und Signaturzähler, Goldschild (absorbiert Schaden), Mauer (Treffer bis
 		# zum Bruch).
 		"key": id, "charge": "", "rounds": 0, "sig": 0, "shield": 0, "wall": 0}
+
+## ---------- Gemalte Kulissen (Stufe 3) ----------
+## Je Thema eine Liste von Ebenen, von hinten nach vorn:
+##   file   Bild unter res://assets/backdrops/ ("a|b" = zwei Kacheln im Wechsel)
+##   scale  Vergrößerung            base  Bildschirm-y der Unterkante
+##   par    Parallax: 1 = klebt an der Kamera (unendlich fern), 0 = Bühnenebene
+##   depth  Anteil Dunst            keep  Anteil Originalfarbe
+##   z      Zeichenebene            gain  Helligkeit (unter 1 = zurückgenommen,
+##          damit die Figuren davor klar lesbar bleiben)
+## "ramp" ist die Farbleiter dunkel/mittel/hell, "silhouettes" nennt alte
+## Silhouetten-Ebenen, die zusätzlich stehen bleiben (Burgtürme der Hassfestung).
+const BACKDROPS := {
+	"toxic": {
+		"ramp": [Color(0.01, 0.05, 0.03), Color(0.07, 0.30, 0.14), Color(0.55, 1.0, 0.45)],
+		"fog": Color(0.05, 0.20, 0.10),
+		"layers": [
+			{"file": "industrial/sky.png", "scale": 3.0, "base": 420.0, "par": 0.96, "depth": 0.0, "keep": 0.25, "z": -19, "gain": 0.5},
+			{"file": "industrial/far.png", "scale": 3.0, "base": 346.0, "par": 0.86, "depth": 0.55, "keep": 0.2, "z": -18, "gain": 0.7},
+			{"file": "industrial/mid.png", "scale": 3.0, "base": 350.0, "par": 0.70, "depth": 0.30, "keep": 0.2, "z": -17, "gain": 0.7},
+			{"file": "industrial/near.png", "scale": 3.0, "base": 354.0, "par": 0.45, "depth": 0.0, "keep": 0.35, "z": -15, "gain": 0.58},
+		]},
+	"gold": {
+		"ramp": [Color(0.05, 0.03, 0.02), Color(0.40, 0.24, 0.08), Color(1.0, 0.86, 0.42)],
+		"fog": Color(0.22, 0.13, 0.05),
+		"layers": [
+			{"file": "city/sky_a.png|city/sky_b.png", "scale": 3.0, "base": 531.0, "par": 0.96, "depth": 0.0, "keep": 0.3, "z": -19, "gain": 0.8},
+			{"file": "city/mid.png", "scale": 3.0, "base": 350.0, "par": 0.78, "depth": 0.45, "keep": 0.15, "z": -17, "gain": 0.7},
+			{"file": "city/near.png", "scale": 2.0, "base": 356.0, "par": 0.50, "depth": 0.2, "keep": 0.2, "z": -15, "gain": 0.6},
+		]},
+	"hate": {
+		"ramp": [Color(0.05, 0.01, 0.02), Color(0.42, 0.07, 0.07), Color(1.0, 0.52, 0.36)],
+		"fog": Color(0.22, 0.04, 0.05),
+		"silhouettes": [1],
+		"layers": [
+			{"file": "cemetery/sky.png", "scale": 3.0, "base": 597.0, "par": 0.96, "depth": 0.0, "keep": 0.3, "z": -19, "gain": 0.8},
+			{"file": "cemetery/mountains.png", "scale": 3.0, "base": 690.0, "par": 0.84, "depth": 0.45, "keep": 0.2, "z": -18, "gain": 0.8},
+			{"file": "cemetery/graveyard.png", "scale": 3.0, "base": 545.0, "par": 0.40, "depth": 0.0, "keep": 0.35, "z": -14, "gain": 0.68},
+		]},
+}
+
+var _parallax: Array = []  # [{node, home, par}] — wird in _process nachgeführt
+
+func _build_backdrop(_pal: Dictionary) -> void:
+	var cfg: Dictionary = BACKDROPS[arena_theme]
+	var ramp: Array = cfg["ramp"]
+	for spec: Dictionary in cfg["layers"]:
+		var tex := _backdrop_texture(spec["file"])
+		if tex == null:
+			continue
+		var sc: float = spec["scale"]
+		# Breiter als das Bild kacheln: 120 px Rand je Seite für Parallax/Beben.
+		var need := (960.0 + 240.0) / sc
+		var spr := Sprite2D.new()
+		spr.texture = tex
+		spr.centered = false
+		spr.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		spr.region_enabled = true
+		spr.region_rect = Rect2(0, 0, maxf(need, tex.get_width()), tex.get_height())
+		spr.scale = Vector2(sc, sc)
+		spr.z_index = spec["z"]
+		spr.material = Fx.backdrop_material(ramp[0], ramp[1], ramp[2], cfg["fog"],
+			spec["keep"], spec["depth"], spec.get("gain", 1.0))
+		var home := Vector2(-120.0, float(spec["base"]) - tex.get_height() * sc)
+		spr.position = home
+		add_child(spr)
+		_parallax.append({"node": spr, "home": home, "par": float(spec["par"])})
+	set_process(true)
+
+## Lädt eine Ebene; "a|b" setzt zwei gleich große Bilder nebeneinander, damit
+## sich eine schmale Kachel nicht so auffällig wiederholt.
+func _backdrop_texture(spec: String) -> Texture2D:
+	var parts := spec.split("|")
+	var first: Texture2D = load("res://assets/backdrops/" + parts[0])
+	if parts.size() == 1 or first == null:
+		return first
+	var img := Image.create(first.get_width() * parts.size(), first.get_height(), false, Image.FORMAT_RGBA8)
+	for i in parts.size():
+		var t: Texture2D = load("res://assets/backdrops/" + parts[i])
+		if t == null:
+			continue
+		var src := t.get_image()
+		src.convert(Image.FORMAT_RGBA8)
+		img.blit_rect(src, Rect2i(0, 0, src.get_width(), src.get_height()),
+			Vector2i(first.get_width() * i, 0))
+	return ImageTexture.create_from_image(img)
+
+## Echtes Parallax: ferne Ebenen folgen der Kamera fast vollständig (und
+## bewegen sich im Bild darum kaum), nahe bleiben auf der Bühne stehen.
+func _process(_delta: float) -> void:
+	if _parallax.is_empty() or cam == null or not is_instance_valid(cam):
+		return
+	var shift: Vector2 = cam.position + cam.offset - Vector2(480, 270)
+	for p: Dictionary in _parallax:
+		var n: Sprite2D = p["node"]
+		if is_instance_valid(n):
+			n.position = (p["home"] as Vector2) + Vector2(shift.x, shift.y * 0.6) * float(p["par"])

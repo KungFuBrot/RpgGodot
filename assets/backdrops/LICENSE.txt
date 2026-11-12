@@ -1,0 +1,19 @@
+Battle backdrops — all artwork by Luis Zuno (@ansimuz), released as CC0 /
+public domain ("Credit is not required but appreciated").
+https://creativecommons.org/publicdomain/zero/1.0/
+
+industrial/  "Industrial Parallax Background"
+             https://opengameart.org/content/industrial-parallax-background
+             sky.png, far.png, mid.png, near.png (layers renamed)
+
+city/        "Warped City"
+             https://opengameart.org/content/warped-city
+             sky_a.png, sky_b.png (skyline-a/-b), mid.png (buildings-bg),
+             near.png (near-buildings-bg)
+
+cemetery/    "Gothicvania Cemetery Pack"
+             https://opengameart.org/content/gothicvania-cemetery-pack
+             sky.png (background), mountains.png, graveyard.png
+
+The files are unmodified. In the game they are recoloured at runtime by a
+gradient-map shader (scripts/Fx.gd, backdrop_material) to match each arena.

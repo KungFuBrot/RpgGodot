@@ -110,6 +110,9 @@ func _build_ui() -> void:
 		h["mp_fill"] = _make_bar(bars, 110, 10, Color(0.35, 0.55, 1.0), Color(0.65, 0.75, 1.0, 0.85))
 	msg_label = Label.new()
 	msg_label.position = Vector2(30, 84)
+	# Lange Sätze (Boss-Dialoge) brechen um statt rechts aus dem Bild zu laufen.
+	msg_label.custom_minimum_size = Vector2(900, 0)
+	msg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	msg_label.add_theme_font_size_override("font_size", 22)
 	msg_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	msg_label.add_theme_constant_override("outline_size", 6)
