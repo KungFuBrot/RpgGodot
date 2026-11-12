@@ -6,7 +6,7 @@
 |---|---|
 | 0 Fundament | fertig, live |
 | 1 Fordernde Kämpfe | fertig, live — Messwerte unten |
-| 2 Lebendigere Kampffiguren | offen |
+| 2 Lebendigere Kampffiguren | fertig, live — Figuren-Shader (Trefferblitz, Kantenlicht, Zielumriss, Atmen für Einzelbild-Gegner), Angriffs-/Zauberposen laufen einmal sauber durch, Gegner-Aufstellung passt zur LPC-Größe |
 | 3 Kampfkulissen | offen |
 | 4 Feld-Umgebungen | offen (dort auch Pixel-Snap, aus Stufe 0 verschoben) |
 | 5 Leben in der Welt | offen |

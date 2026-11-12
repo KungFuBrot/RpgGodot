@@ -465,13 +465,53 @@ func _pose(h: Dictionary, name: String, dur := 0.30) -> void:
 	if h.is_empty() or not is_instance_valid(h["sprite"]):
 		return
 	h["anim"] = name
-	_hero_tex(h, name, h["frame"])
+	h["frame"] = 0
+	# Schläge, Zauber und Treffer laufen EINMAL sauber von vorn durch. Früher
+	# stieg die Pose mitten im Zyklus ein und der Leerlauf-Ticker zeigte in der
+	# kurzen Zeit nur zwei, drei beliebige Bilder davon.
+	var n: int = mini(RigFactory.anim_frames(name, h["data"]["id"]), int(POSE_ONCE.get(name, 0)))
+	if n > 1:
+		h["lock"] = name
+		var run := create_tween()
+		run.tween_method(_play_once_step.bind(h, name, n), 0.0, float(n - 1),
+			minf(dur * 0.9, n * 0.07))
+	else:
+		h["lock"] = ""
+		_hero_tex(h, name, 0)
 	var t := get_tree().create_timer(dur)
 	t.timeout.connect(func():
 		if h.get("anim", "") != name or not is_instance_valid(h["sprite"]):
 			return
+		h["lock"] = ""
 		h["anim"] = "idle"
-		_hero_tex(h, "idle", h["frame"]))
+		h["frame"] = 0
+		_hero_tex(h, "idle", 0))
+
+## Posen, die einmal durchlaufen; Wert = höchstens so viele Bilder. "hit" nutzt
+## nur den Anfang des LPC-Sturzblatts (Zusammenzucken), nicht den ganzen Sturz.
+const POSE_ONCE := {"attack": 99, "attack2": 99, "attack3": 99, "cast": 99, "hit": 3}
+
+## Weißer Trefferblitz über den Figuren-Shader.
+func _unit_flash(s: Sprite2D, amount := 0.9, dur := 0.16) -> void:
+	if not is_instance_valid(s) or not s.has_meta("unit_mat"):
+		return
+	var m := s.material as ShaderMaterial
+	if m == null:
+		return
+	var tw := create_tween()
+	tw.tween_method(func(v: float): m.set_shader_parameter("flash", v), amount, 0.0, dur)
+
+## Umriss einer Figur an-/ausschalten (Alpha 0 = aus).
+func _set_outline(s: Sprite2D, col: Color) -> void:
+	if not is_instance_valid(s) or not s.has_meta("unit_mat"):
+		return
+	var m := s.material as ShaderMaterial
+	if m != null and m.shader == Fx._unit_shader:
+		m.set_shader_parameter("outline_col", col)
+
+func _clear_outlines() -> void:
+	for e in enemies:
+		_set_outline(e["sprite"], Color(0, 0, 0, 0))
 
 ## Setzt das Bild einer Heldenfigur — immer über diesen Weg, denn die
 ## Bodenspiegelung ist ein eigenes Sprite mit eigener Textur und bliebe sonst
@@ -492,16 +532,23 @@ func _play_once(h: Dictionary, name: String, dur := 0.42) -> void:
 	if h.is_empty() or not is_instance_valid(h["sprite"]):
 		return
 	h["anim"] = name
+	h["lock"] = name
 	var n: int = maxi(RigFactory.anim_frames(name, h["data"]["id"]), 1)
+	# LPC hält "down" als einzelnes Endbild — der Sturz selbst steckt im
+	# Trefferblatt. Also dessen Bilder durchspielen; das letzte IST "down".
+	var src := name
+	if name == "down" and n == 1 and RigFactory.anim_frames("hit", h["data"]["id"]) > 1:
+		src = "hit"
+		n = RigFactory.anim_frames("hit", h["data"]["id"])
 	var tw := create_tween()
-	tw.tween_method(_play_once_step.bind(h, name, n), 0.0, float(n - 1), dur)
+	tw.tween_method(_play_once_step.bind(h, name, n, src), 0.0, float(n - 1), dur)
 
-func _play_once_step(f: float, h: Dictionary, name: String, n: int) -> void:
+func _play_once_step(f: float, h: Dictionary, name: String, n: int, src := "") -> void:
 	if not is_instance_valid(h["sprite"]) or h.get("anim", "") != name:
 		return
 	var i: int = clampi(int(round(f)), 0, n - 1)
 	h["frame"] = i
-	_hero_tex(h, name, i)
+	_hero_tex(h, name if src == "" else src, i)
 
 ## Dasselbe für Gegner. Sie haben kein Skelett, ihre Animation läuft über
 ## Stauchen, Vorschnellen und Kippen (siehe RigFactory.MON_ANIMS).
@@ -511,20 +558,40 @@ func _epose(e: Dictionary, name: String, dur := 0.45) -> void:
 		return
 	e["anim"] = name
 	e["frame"] = 0
+	e["lock"] = ""
 	var tex := SpriteFactory.enemy_frame(e["id"], 0, name)
 	(e["sprite"] as Sprite2D).texture = tex
 	if is_instance_valid(e.get("refl")):
 		(e["refl"] as Sprite2D).texture = tex
 	if name == "down":
 		return
+	# Angriff und Aufbäumen haben eigene Bildfolgen: einmal von vorn bis
+	# hinten durchspielen statt sie vom Leerlauf-Ticker anreißen zu lassen.
+	var n: int = RigFactory.mon_frames(name, e["id"])
+	if n > 1 and (name == "attack" or name == "roar"):
+		e["lock"] = name
+		var run := create_tween()
+		run.tween_method(_epose_step.bind(e, name, n), 0.0, float(n - 1),
+			minf(dur * 0.9, n * 0.11))
 	var t := get_tree().create_timer(dur)
 	t.timeout.connect(func():
 		if e.get("anim", "") != name or not is_instance_valid(e["sprite"]):
 			return
 		if not e["alive"]:
 			return
+		e["lock"] = ""
 		e["anim"] = "idle"
 		e["frame"] = 0)
+
+func _epose_step(f: float, e: Dictionary, name: String, n: int) -> void:
+	if not is_instance_valid(e["sprite"]) or e.get("anim", "") != name:
+		return
+	var i: int = clampi(int(round(f)), 0, n - 1)
+	e["frame"] = i
+	var tex := SpriteFactory.enemy_frame(e["id"], i, name)
+	(e["sprite"] as Sprite2D).texture = tex
+	if is_instance_valid(e.get("refl")):
+		(e["refl"] as Sprite2D).texture = tex
 
 func _weapon_glint(wp: Sprite2D) -> void:
 	if wp == null or not is_instance_valid(wp):
@@ -616,6 +683,7 @@ func _shake(s: Sprite2D, recoil := 0.0) -> void:
 		for i in 4:
 			tw.tween_property(s, "position:x", orig.x + (8 if i % 2 == 0 else -8), 0.04)
 		tw.tween_property(s, "position:x", orig.x, 0.04)
+	_unit_flash(s)
 	var flash := create_tween()
 	flash.tween_property(s, "modulate", Fx.hot(Color(1.0, 0.45, 0.4), 1.6), 0.08)
 	# Zurück zur Grundtönung (Themen-Tint bzw. Wutfärbung), nicht stur zu Weiß.

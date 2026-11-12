@@ -269,3 +269,71 @@ static func pulse(l: PointLight2D, base_energy: float, period := 1.6) -> void:
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tw.tween_property(l, "energy", base_energy * 0.8, period * 0.5) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+# ---------- Figuren-Shader (Kampf) ----------
+# Ein Material je Kämpfer. Alles bleibt im Pixelraster — nichts wird gestreckt
+# oder weichgezeichnet:
+#   flash        weißer Trefferblitz (funktioniert auch im Web, wo es kein
+#                HDR-Überstrahlen gibt)
+#   rim_col      Kantenlicht in der Arenafarbe an der dem Licht zugewandten
+#                Seite — bindet die Figur in die Szene ein
+#   outline_col  Umriss für die Zielauswahl
+#   breathe      Atmen für Figuren mit nur EINEM Bild: der Oberkörper sinkt im
+#                Takt um einen Kunstpixel ab (klassisches Zwei-Bild-Atmen)
+# "texel" = Bildschirmpixel je Kunstpixel (LPC-Blätter liegen doppelt groß vor).
+const UNIT_SHADER_CODE := "
+shader_type canvas_item;
+uniform float flash : hint_range(0.0, 1.0) = 0.0;
+uniform vec4 flash_col : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+uniform vec4 rim_col : source_color = vec4(0.0, 0.0, 0.0, 0.0);
+uniform vec2 rim_dir = vec2(-1.0, -1.0);
+uniform vec4 outline_col : source_color = vec4(0.0, 0.0, 0.0, 0.0);
+uniform float texel = 2.0;
+uniform float breathe = 0.0;
+uniform float rate = 0.4;
+uniform float phase = 0.0;
+uniform float split = 0.55;
+varying float v_y;
+varying vec4 v_col;
+
+void vertex() {
+	v_y = VERTEX.y < 0.0 ? 0.0 : 1.0;
+	v_col = COLOR;
+}
+
+void fragment() {
+	vec2 px = TEXTURE_PIXEL_SIZE * texel;
+	vec2 uv = UV;
+	if (breathe > 0.0 && v_y < split) {
+		uv.y -= px.y * breathe * step(0.5, fract(TIME * rate + phase));
+	}
+	vec4 tex = texture(TEXTURE, uv);
+	vec4 col = tex * v_col;
+	if (rim_col.a > 0.0 && tex.a > 0.5) {
+		float open = 1.0 - texture(TEXTURE, uv + rim_dir * px).a;
+		col.rgb += rim_col.rgb * rim_col.a * open;
+	}
+	col.rgb = mix(col.rgb, flash_col.rgb, flash * step(0.05, tex.a));
+	if (outline_col.a > 0.0 && tex.a < 0.1) {
+		float n = texture(TEXTURE, uv + vec2(px.x, 0.0)).a
+			+ texture(TEXTURE, uv - vec2(px.x, 0.0)).a
+			+ texture(TEXTURE, uv + vec2(0.0, px.y)).a
+			+ texture(TEXTURE, uv - vec2(0.0, px.y)).a;
+		if (n > 0.5) {
+			col = outline_col;
+		}
+	}
+	COLOR = col;
+}
+"
+
+static var _unit_shader: Shader
+
+static func unit_material(rim := Color(0, 0, 0, 0)) -> ShaderMaterial:
+	if _unit_shader == null:
+		_unit_shader = Shader.new()
+		_unit_shader.code = UNIT_SHADER_CODE
+	var m := ShaderMaterial.new()
+	m.shader = _unit_shader
+	m.set_shader_parameter("rim_col", rim)
+	return m

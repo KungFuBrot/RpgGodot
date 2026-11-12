@@ -471,6 +471,7 @@ func _pick_enemy() -> int:
 	_say("Choose a target (Z: OK, X: Back)")
 	await _choice_made
 	cursor.visible = false
+	_clear_outlines()
 	ui_state = "none"
 	_say("")
 	return choice
@@ -481,6 +482,9 @@ func _update_cursor() -> void:
 	var half_w: float = s.texture.get_width() * s.scale.x * 0.5
 	cursor.visible = true
 	cursor.position = s.position + Vector2(-half_w - 24, -10)
+	# Das gewählte Ziel bekommt zusätzlich einen hellen Umriss.
+	_clear_outlines()
+	_set_outline(s, Color(1.0, 0.92, 0.35, 1.0))
 
 func _item_menu(h: Dictionary) -> bool:
 	if GameState.inventory.is_empty():

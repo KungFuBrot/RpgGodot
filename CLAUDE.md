@@ -55,6 +55,18 @@ selbst oder ihren Vorfahren (weiter oben) aufrufen**, nie nach unten:
 
 Neue geteilte Helfer gehören nach `BattleFx` (visuell) bzw. `BattleBase` (Zustand).
 
+### Figuren im Kampf
+
+- Jede Kampffigur trägt `Fx.unit_material()` (Meta `unit_mat`): weißer
+  Trefferblitz (`_unit_flash`), Kantenlicht in der Arenafarbe, Zielumriss
+  (`_set_outline`), Atmen für Gegner mit nur einem Bild. Beim Tod ersetzt der
+  Dissolve-Shader das Material.
+- `_pose` / `_epose` spielen Schlag-, Zauber-, Treffer- und Angriffsposen
+  EINMAL von vorn durch (`POSE_ONCE`, `lock`); der Leerlauf-Ticker hält sich
+  solange heraus. Schleifenposen (block, aim, run, cheer) taktet der Ticker.
+- Nur schwebende Gegner (`BattleStage.FLOATERS`) und Bosse wippen noch;
+  alle anderen stehen (`bob_amp` 0).
+
 ### Boss-Mechanik und Schwierigkeit
 
 - Stellschrauben stehen zentral in `GameState.BOSS_TUNING` / `MOB_TUNING`

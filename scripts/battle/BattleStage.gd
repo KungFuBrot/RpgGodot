@@ -343,6 +343,12 @@ func _build_scene() -> void:
 		# gestauchten Wert als "Normalgröße" ein und die Figur driftet.
 		s.set_meta("base_scale", s.scale)
 		s.flip_h = true  # DTII-Figuren blicken nach rechts → zum Gegner (links) drehen
+		# Figuren-Shader: Trefferblitz, Kantenlicht in der Arenafarbe, Zielumriss.
+		s.material = Fx.unit_material(_rim_color())
+		s.set_meta("unit_mat", true)
+		# Helden stehen fest auf dem Boden — ihr Atmen steckt in den LPC-Bildern,
+		# das starre Auf-und-ab-Schweben entfällt.
+		s.set_meta("bob_amp", 0.0)
 		var home: Vector2 = form["pos"]
 		s.position = home + Vector2(340, 0)
 		var foot_h: float = s.texture.get_height() * 0.5 - 1.0
@@ -370,7 +376,10 @@ func _build_scene() -> void:
 	# Reihenfolge man vorgeht. Boss inklusive, damit auch er mitskaliert.
 	for i in enemy_ids.size():
 		var boss_slot: bool = GameState.ENEMIES[enemy_ids[i]].get("boss", false)
-		var spot := Vector2(222, 222) if boss_slot else Vector2(225 + (i % 2) * 100, 180 + i * 88)
+		# Aufstellung in der Tiefe gestaffelt: die LPC-Gegner sind bis zu 170 px
+		# hoch — in der alten Reihe (88 px Abstand) stand der dritte hinter dem
+		# Menüfeld. Jetzt bleiben alle Füße über der Menükante.
+		var spot: Vector2 = Vector2(222, 222) if boss_slot else ENEMY_SPOTS[i % ENEMY_SPOTS.size()]
 		enemies.append(_make_enemy(enemy_ids[i], spot))
 
 ## Lebendiger Himmel über der Arena: pulsierende Glut in der Höhle,
@@ -903,6 +912,10 @@ func _start_idle_animations() -> void:
 		_start_enemy_ticker(e)
 	for h in heroes:
 		_unit_ticker(randf_range(0.13, 0.19), func():
+			# Läuft gerade eine Einmal-Pose (Schlag, Zauber, Treffer), taktet
+			# die ihre Bilder selbst — der Ticker hält sich heraus.
+			if String(h.get("lock", "")) != "" and h["lock"] == h["anim"]:
+				return
 			if h["data"]["hp"] > 0:
 				# Wie bei den Kreaturen: ruhiges Atmen, volles Tempo im Kampf.
 				if h["anim"] == "idle":
@@ -985,7 +998,13 @@ func _restore_if_revived(hero: Dictionary) -> void:
 
 func _idle_bob(s: Sprite2D, period: float) -> Tween:
 	var tw := create_tween().set_loops()
-	tw.tween_property(s, "position:y", s.position.y - 4.0, period * 0.5) \
+	# Bodenständige Figuren (bob_amp 0) bekommen einen leeren Takt — so bleibt
+	# das Anhalten/Fortsetzen für alle Aufrufer gleich.
+	var amp: float = s.get_meta("bob_amp", 4.0)
+	if amp <= 0.0:
+		tw.tween_interval(period)
+		return tw
+	tw.tween_property(s, "position:y", s.position.y - amp, period * 0.5) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tw.tween_property(s, "position:y", s.position.y, period * 0.5) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -1145,6 +1164,17 @@ func _boss_snort(e: Dictionary) -> void:
 	tw.tween_property(s, "rotation", -0.05, 0.1).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(s, "rotation", 0.0, 0.25).set_trans(Tween.TRANS_SINE)
 
+const ENEMY_SPOTS := [Vector2(292, 158), Vector2(162, 220), Vector2(300, 282)]
+
+## Gegner, die schweben statt zu stehen — nur sie wippen im Leerlauf.
+const FLOATERS := ["qualmgeist", "wutgeist", "grauschemen", "paragraphengeist",
+	"hohlgaenger", "namenlose"]
+
+## Kantenlicht der Figuren: die Leitfarbe der Arena, zurückgenommen.
+func _rim_color() -> Color:
+	var c: Color = THEME_STYLE.get(arena_theme, THEME_STYLE["toxic"])["banner"]
+	return Color(c.r, c.g, c.b, 0.34)
+
 ## Bild-Ticker eines Gegners (auch für nachträglich gerufene Verstärkung).
 func _start_enemy_ticker(e: Dictionary) -> void:
 	_unit_ticker(randf_range(0.13, 0.19), func():
@@ -1152,6 +1182,8 @@ func _start_enemy_ticker(e: Dictionary) -> void:
 		# mitten in der Bewegung ein.
 		var anim: String = e.get("anim", "idle")
 		if not e["alive"] and anim != "down":
+			return
+		if String(e.get("lock", "")) != "" and e["lock"] == anim:
 			return
 		# Atmen läuft auf einem Drittel des Takts: mit voller Rate wirkte
 		# es hektisch. Aktionen (Angriff, Treffer) behalten das Tempo.
@@ -1190,6 +1222,17 @@ func _make_enemy(id: String, home: Vector2) -> Dictionary:
 	s.scale = Vector2(RigFactory.BATTLE_SCALE, RigFactory.BATTLE_SCALE)
 	s.set_meta("base_scale", s.scale)
 	s.position = home - Vector2(500, 0)
+	var um := Fx.unit_material(_rim_color())
+	# Gegner mit nur einem Bild atmen über den Shader (Oberkörper sinkt im Takt).
+	if LpcMock.active() and LpcMock.monster_frames(def["sprite"]) == 1:
+		um.set_shader_parameter("breathe", 1.0)
+		um.set_shader_parameter("rate", randf_range(0.32, 0.46))
+		um.set_shader_parameter("phase", randf())
+	s.material = um
+	s.set_meta("unit_mat", true)
+	# Nur Geister und Schwebende wippen noch; wer Beine hat, steht.
+	if not is_boss and not (def["sprite"] in FLOATERS):
+		s.set_meta("bob_amp", 0.0)
 	var refl: Sprite2D
 	var mist: CPUParticles2D = null
 	if is_boss:
