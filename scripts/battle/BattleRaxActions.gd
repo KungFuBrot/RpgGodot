@@ -839,7 +839,7 @@ func _plasma_lance(h: Dictionary, ab: Dictionary, e: Dictionary) -> void:
 	_shake_camera(1.9)
 	await _hitstop(0.11)
 	var dmg: int = int((ab["power"] + d["mag"]) * randf_range(0.9, 1.15)) - e["def"] / 2
-	await _damage_enemy(e, maxi(dmg, 1))
+	await _damage_enemy(e, maxi(dmg, 1), true)
 	h["anim"] = "idle"
 	_hero_tex(h, "idle")
 	await _sprint(h, h["home"], 0.2)

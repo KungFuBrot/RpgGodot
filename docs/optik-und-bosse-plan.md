@@ -1,5 +1,31 @@
 # RpgGodot — Optik-Aufwertung und fordernde Bosskämpfe (Stufenplan)
 
+## Stand
+
+| Stufe | Status |
+|---|---|
+| 0 Fundament | fertig, live |
+| 1 Fordernde Kämpfe | fertig, live — Messwerte unten |
+| 2 Lebendigere Kampffiguren | offen |
+| 3 Kampfkulissen | offen |
+| 4 Feld-Umgebungen | offen (dort auch Pixel-Snap, aus Stufe 0 verschoben) |
+| 5 Leben in der Welt | offen |
+| 6 Oberfläche und Übergänge | offen |
+| 7 Abschluss | offen |
+
+**Stufe 1, Abnahmemessung** (30 Bot-Läufe je Boss, erwartete Stufe):
+
+| Boss | Stufe | taktisch | nur Angriff | Runden (Sieg) |
+|---|---|---|---|---|
+| Schlotbaron | 3 | 80 % | 0 % | 14 |
+| Monopolfürst | 5 | 100 % | 13 % | 15 |
+| Der Spalter | 8 | 90 % | 3 % | 17 |
+| Die Stille | 10 | 100 % | 10 % | 15 |
+
+Vorher fielen Boss 3 und 4 in 3–4 Runden, auch ohne jede Taktik. Die Kämpfe
+dauern jetzt etwas länger als die geplanten 8–14 Runden; kürzer ging nur auf
+Kosten der Regel „stures Angreifen verliert".
+
 ## Kontext
 
 Das Spiel (`C:\Education\GitHub\RpgGodot`, Godot 4.7, Web-Export auf GitHub Pages) soll

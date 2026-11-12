@@ -5,7 +5,10 @@ extends BattleSummons
 ## BattleBase > BattleFx > BattleStage > BattleUi > BattleBossCine > BattleDamage
 ## > BattleHeroActions > BattleRaxActions > BattleSummons > BattleEnemyActions > Battle
 
-func _enemy_turn(e: Dictionary) -> void:
+## slot/last: Nummer der Aktion in dieser Runde und ob es die letzte ist —
+## Bosse handeln mehrfach und laden Großangriffe nur mit der LETZTEN Aktion
+## auf, damit die Helden eine volle Runde Zeit zum Reagieren haben.
+func _enemy_turn(e: Dictionary, slot := 0, last := true) -> void:
 	var alive_heroes := []
 	for h in heroes:
 		if h["data"]["hp"] > 0:
@@ -17,21 +20,13 @@ func _enemy_turn(e: Dictionary) -> void:
 	# gegen die Angriffs-Tweens um die Position).
 	_pause_bob(e)
 	var bob_period := 1.9 if e["is_boss"] else 1.6
-	# In der Wut-Phase entfesselt der Boss seine erste Ultimative; ein paar
-	# Züge später (oder wenn er fast fällt) folgt einmalig die zweite.
-	if e["is_boss"] and e["enraged"] and not e.get("ult_used", false):
-		e["ult_used"] = true
-		e["ult_act"] = e["acts"]
-		await _boss_ultimate(e, alive_heroes, 0)
-		_resume_bob(e, bob_period)
-		return
-	if e["is_boss"] and e["enraged"] and e.get("ult_used", false) \
-			and not e.get("ult2_used", false) \
-			and (e["acts"] - e.get("ult_act", 0) >= 3 or e["hp"] < e["max_hp"] * 0.2):
-		e["ult2_used"] = true
-		await _boss_ultimate(e, alive_heroes, 1)
-		_resume_bob(e, bob_period)
-		return
+	# Bosse: Aufgeladenes entfesseln, neu aufladen oder Signaturzug — alles
+	# andere ist ein gewöhnlicher Angriff weiter unten.
+	if e["is_boss"]:
+		var handled: bool = await _boss_plan(e, alive_heroes, slot, last)
+		if handled:
+			_resume_bob(e, bob_period)
+			return
 	# Normale Monster entfesseln alle 3 Züge ihre benannte Spezialattacke —
 	# mit eigener Inszenierung (Banner + Ladephase) statt des Standard-Windups.
 	var sp: Dictionary = e.get("special", {})
@@ -72,10 +67,6 @@ func _enemy_turn(e: Dictionary) -> void:
 	windup.parallel().tween_property(es, "modulate", e.get("tint", Color.WHITE), 0.09)
 	windup.tween_property(es, "scale", base_scale, 0.07)
 	await windup.finished
-	if e["is_boss"] and e["acts"] % 3 == 0:
-		await _boss_aoe(e, alive_heroes)
-		_resume_bob(e, bob_period)
-		return
 	var target: Dictionary = alive_heroes[randi() % alive_heroes.size()]
 	var line: String = e.get("attack_line", "")
 	if line != "":
@@ -407,10 +398,16 @@ func _boss_aoe(e: Dictionary, targets: Array) -> void:
 					.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 				fall.tween_callback(_acid_impact.bind(drop))
 	await get_tree().create_timer(0.55).timeout
+	# Angekündigter Großangriff: ohne Deckung tut er richtig weh.
+	var aoe_mul: float = float(GameState.boss_tuning(e.get("key", "boss"))["aoe"])
 	for t in targets:
-		var dmg := maxi(int(e["atk"] * randf_range(0.7, 0.9)) - t["data"]["def"], 1)
+		var dmg := maxi(int(e["atk"] * aoe_mul * randf_range(0.92, 1.08)) - t["data"]["def"], 1)
 		_burst(t["sprite"].position, st["burst"], 8, 110)
+		var covered: bool = t.get("defending", false)
 		_damage_hero(t, dmg)
+		# Die Giftflut des Schlotbarons vergiftet jeden, der nicht in Deckung war.
+		if theme == "toxic" and not covered:
+			_add_status(t, "poison", 2)
 	_undim(dim)
 	await get_tree().create_timer(0.7).timeout
 
@@ -462,9 +459,11 @@ func _boss_ultimate(e: Dictionary, targets: Array, idx := 0) -> void:
 		_:
 			if idx == 0: await _ult_schwarzer_himmel()
 			else: await _ult_meltdown()
+	# Die zweite Ultimative ist der Verzweiflungsschlag — sie trifft härter
+	# (Faktoren in GameState.BOSS_TUNING).
+	var ult_mul: Array = GameState.boss_tuning(e.get("key", "boss"))["ult"]
 	for t in targets:
-		# Die zweite Ultimative ist der Verzweiflungsschlag — sie trifft härter.
-		var mul := randf_range(0.95, 1.15) if idx == 0 else randf_range(1.05, 1.25)
+		var mul := float(ult_mul[clampi(idx, 0, 1)]) * randf_range(0.95, 1.08)
 		var dmg := maxi(int(e["atk"] * mul) - t["data"]["def"], 1)
 		_damage_hero(t, dmg)
 	var shrink := create_tween()
@@ -1426,3 +1425,152 @@ func _special_drain(e: Dictionary, target: Dictionary) -> void:
 	glow.tween_property(es, "modulate", Color(1.2, 1.3, 1.45), 0.2)
 	glow.tween_property(es, "modulate", e.get("tint", Color.WHITE), 0.35)
 	await get_tree().create_timer(0.5).timeout
+
+## ---------- Boss-Zuglogik (Stufe 1: fordernde Bosse) ----------
+
+## Entscheidet die Boss-Aktion. Rückgabe true = Aktion ist erledigt, false =
+## der Aufrufer führt den gewöhnlichen Angriff aus.
+##   1. Aufgeladenes wird mit der ERSTEN Aktion der Folgerunde entfesselt.
+##   2. Mit der LETZTEN Aktion einer Runde wird aufgeladen: Ultimates in der
+##      Wut-Phase, sonst jede zweite Runde der Flächenangriff.
+##   3. Jede dritte freie Aktion ist der Signaturzug des Bosses.
+func _boss_plan(e: Dictionary, targets: Array, _slot: int, last: bool) -> bool:
+	if String(e.get("charge", "")) != "":
+		var kind: String = e["charge"]
+		e["charge"] = ""
+		e["release_round"] = round_no
+		_end_charge_fx(e)
+		_refresh_boss_note(e)
+		match kind:
+			"ult1": await _boss_ultimate(e, targets, 0)
+			"ult2": await _boss_ultimate(e, targets, 1)
+			_: await _boss_aoe(e, targets)
+		return true
+	# Zwischen zwei Großangriffen liegt mindestens "gap" Runden Luft — sonst
+	# kämen die Helden aus der Deckung gar nicht mehr heraus.
+	var tune: Dictionary = GameState.boss_tuning(e.get("key", "boss"))
+	if last and round_no - int(e.get("release_round", -1)) >= int(tune["gap"]):
+		var next := ""
+		if e["enraged"] and not e.get("ult_used", false):
+			next = "ult1"
+			e["ult_used"] = true
+			e["ult_round"] = round_no
+		elif e["enraged"] and not e.get("ult2_used", false) \
+				and (round_no - int(e.get("ult_round", 0)) >= 3 or e["hp"] < e["max_hp"] * 0.2):
+			next = "ult2"
+			e["ult2_used"] = true
+		else:
+			next = "aoe"
+		if next != "":
+			await _boss_charge(e, next)
+			return true
+	e["sig"] = int(e.get("sig", 0)) + 1
+	if int(e["sig"]) % 3 == 2:
+		await _boss_signature(e, targets)
+		return true
+	return false
+
+## Aufladen: Banner, bleibende Aura und Hinweis unter der Boss-Leiste. Der
+## Schlag selbst folgt erst in der nächsten Runde.
+func _boss_charge(e: Dictionary, kind: String) -> void:
+	var st := _style()
+	var nm: String = boss_def.get("aoe_name", "Onslaught")
+	if kind == "ult1":
+		nm = boss_def.get("ultimate_name", nm)
+	elif kind == "ult2":
+		nm = boss_def.get("ultimate2_name", boss_def.get("ultimate_name", nm))
+	e["charge"] = kind
+	e["charge_name"] = nm
+	_say("%s gathers power for %s — take cover!" % [e["name"], nm])
+	AudioManager.play_sfx("ult_charge")
+	_epose(e, "roar", 1.0)
+	_attack_banner("! %s INCOMING !" % nm.to_upper(), st["banner"])
+	_shake_camera(1.2)
+	var es: Sprite2D = e["sprite"]
+	var mat := CanvasItemMaterial.new()
+	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	var aura := Sprite2D.new()
+	aura.texture = SpriteFactory.particle("light_01")
+	aura.material = mat
+	var ac: Color = st["aura"]
+	aura.modulate = Color(ac.r, ac.g, ac.b, 0.0)
+	aura.position = es.position
+	aura.scale = Vector2(1.5, 1.5) if kind == "aoe" else Vector2(2.1, 2.1)
+	aura.z_index = -1
+	add_child(aura)
+	e["charge_fx"] = aura
+	var pulse := aura.create_tween().set_loops()
+	pulse.tween_property(aura, "modulate:a", 0.75, 0.4).set_trans(Tween.TRANS_SINE)
+	pulse.tween_property(aura, "modulate:a", 0.35, 0.4).set_trans(Tween.TRANS_SINE)
+	_refresh_boss_note(e)
+	await get_tree().create_timer(1.1).timeout
+
+func _end_charge_fx(e: Dictionary) -> void:
+	var fx: Variant = e.get("charge_fx")
+	if fx != null and is_instance_valid(fx):
+		(fx as Node).queue_free()
+	e["charge_fx"] = null
+
+## Gemeinsamer Auftakt der Signaturzüge: Ansage, Banner, Ausholen.
+func _sig_open(e: Dictionary, title: String, line: String) -> void:
+	_say(line)
+	_attack_banner("- %s -" % title.to_upper(), _style()["banner"])
+	_epose(e, "attack", 0.7)
+	AudioManager.play_sfx("charge")
+	await get_tree().create_timer(0.7).timeout
+
+## Signaturzug je Boss — das, was den Kampf taktisch macht:
+##   Schlotbaron   Gift (zehrt jede Runde, bis geheilt wird)
+##   Monopolfürst  Steuer (MP-Abzug bei allen, der Fürst heilt sich damit)
+##   Der Spalter   abwechselnd Mauer des Hasses und Isolation eines Helden
+##   Die Stille    Schweigen (Fähigkeiten eines Helden versiegelt)
+func _boss_signature(e: Dictionary, targets: Array) -> void:
+	var theme: String = boss_def.get("theme", "toxic")
+	var st := _style()
+	var target: Dictionary = targets[randi() % targets.size()]
+	var tname: String = target["data"]["name"]
+	match theme:
+		"gold":
+			await _sig_open(e, "Tax Audit", "%s audits your reserves — everyone pays!" % e["name"])
+			var drained := 0
+			for t in targets:
+				var td: Dictionary = t["data"]
+				var take := mini(maxi(int(td["max_mp"] * 0.15), 3), td["mp"])
+				td["mp"] -= take
+				drained += take
+				_burst(t["sprite"].position, Color(1.0, 0.85, 0.3), 8, 110)
+				_float_text(t["sprite"].position, "-%d MP" % take, Color(0.55, 0.7, 1.0), 24)
+			AudioManager.play_sfx("coin")
+			_refresh_party()
+			var heal := mini(drained * 2, e["max_hp"] - e["hp"])
+			if heal > 0:
+				e["hp"] += heal
+				_float_text(e["sprite"].position + Vector2(0, -60), "+%d" % heal, Color(1.0, 0.9, 0.4))
+				_refresh_boss_bar(e)
+		"hate":
+			if int(e.get("wall", 0)) <= 0 and int(e.get("sig_alt", 0)) % 2 == 0:
+				await _sig_open(e, "Wall of Hate", "%s raises a Wall of Hate — blows glance off it!" % e["name"])
+				e["wall"] = 4
+				_burst(e["sprite"].position, st["burst"], 20, 160)
+				AudioManager.play_sfx("stomp")
+				_refresh_boss_note(e)
+			else:
+				await _sig_open(e, "Divide", "%s tears %s away from the others!" % [e["name"], tname])
+				_burst(target["sprite"].position, st["burst"], 10, 120)
+				AudioManager.play_sfx("hit")
+				_damage_hero(target, maxi(int(e["atk"] * 0.7) - target["data"]["def"], 1))
+				_add_status(target, "isolated", 2)
+			e["sig_alt"] = int(e.get("sig_alt", 0)) + 1
+		"void":
+			await _sig_open(e, "Hush", "%s looks at %s — and the words die away." % [e["name"], tname])
+			_burst(target["sprite"].position, st["burst"], 10, 120)
+			AudioManager.play_sfx("hit")
+			_damage_hero(target, maxi(int(e["atk"] * 0.7) - target["data"]["def"], 1))
+			_add_status(target, "silenced", 2)
+		_:
+			await _sig_open(e, "Corrosive Spit", "%s spits corrosive sludge at %s!" % [e["name"], tname])
+			_burst(target["sprite"].position, Color(0.5, 0.95, 0.3), 12, 130)
+			AudioManager.play_sfx("splat")
+			_damage_hero(target, maxi(int(e["atk"] * 0.8) - target["data"]["def"], 1))
+			_add_status(target, "poison", 2)
+	await get_tree().create_timer(0.8).timeout

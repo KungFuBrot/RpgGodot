@@ -9,6 +9,7 @@ var touch: TouchControls
 # Merker, um nach einem Kampf an dieselbe Stelle zurückzukehren.
 var field_return := {"map": "town", "spawn": "start", "pos": Vector2i(-1, -1)}
 var last_battle_was_final_boss := false
+var battle_snapshot := {}  # Stand vor dem Kampf — nach einer Niederlage geht es von dort weiter
 
 func _ready() -> void:
 	GameState.main = self
@@ -31,6 +32,9 @@ func _ready() -> void:
 		add_child(proto)
 		await proto.run(OS.get_environment("PROTO3D"))
 		get_tree().quit()
+		return
+	if OS.get_environment("AUTOBATTLE") != "":
+		_auto_series()
 		return
 	if OS.get_environment("SPELLSHOT") != "":
 		goto_map("town", "start")
@@ -126,6 +130,7 @@ func goto_map(map_id: String, spawn_id: String, exact_pos := Vector2i(-1, -1)) -
 
 func start_battle(enemy_ids: Array, from_map: String, pos: Vector2i) -> void:
 	field_return = {"map": from_map, "spawn": "", "pos": pos}
+	battle_snapshot = GameState.snapshot()
 	last_battle_was_final_boss = enemy_ids.has("boss4")
 	AudioManager.play_sfx("encounter")
 	# Kurzes Aufblitzen als Kampf-Übergang.
@@ -152,8 +157,11 @@ func start_battle(enemy_ids: Array, from_map: String, pos: Vector2i) -> void:
 
 func _on_battle_finished(victory: bool) -> void:
 	if not victory:
-		GameState.reset_party()
-		goto_map("town", "start")
+		# Niederlage: zurück an die Stelle vor dem Kampf, mit dem Stand von
+		# davor (Items kommen zurück, alle stehen mit mindestens halben LP/MP
+		# wieder auf). Früher hieß das: Stufe 1 und ab in die Stadt.
+		GameState.restore(battle_snapshot)
+		goto_map(field_return["map"], "", field_return["pos"])
 	elif last_battle_was_final_boss and GameState.boss4_defeated:
 		_show_ending()
 	else:
@@ -226,3 +234,81 @@ func _setup_input() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = key
 			InputMap.action_add_event(action, ev)
+
+## ---------- Balancing-Lauf (env AUTOBATTLE) ----------
+## Lässt einen Bot die Bosskämpfe im Zeitraffer durchspielen und druckt je
+## Boss und Bot Siegquote und Rundenzahl. Läuft headless:
+##   AUTOBATTLE=all|boss|boss2|boss3|boss4   welche Bosse
+##   AUTOBOT=smart|naive                     nur ein Bot (Standard: beide)
+##   AUTORUNS=20                             Läufe je Boss und Bot
+##   AUTOLEVEL=-1                            Stufe relativ zur erwarteten
+##   AUTOSPEED=40                            Zeitraffer-Faktor
+func _auto_series() -> void:
+	var which := OS.get_environment("AUTOBATTLE")
+	var ids: Array = ["boss", "boss2", "boss3", "boss4"] if which == "all" else [which]
+	var bots: Array = ["smart", "naive"]
+	if OS.get_environment("AUTOBOT") != "":
+		bots = [OS.get_environment("AUTOBOT")]
+	var runs := maxi(int(OS.get_environment("AUTORUNS")), 1) if OS.get_environment("AUTORUNS") != "" else 20
+	var delta := int(OS.get_environment("AUTOLEVEL"))
+	var speed := float(OS.get_environment("AUTOSPEED")) if OS.get_environment("AUTOSPEED") != "" else 40.0
+	Engine.time_scale = speed
+	for pair: String in OS.get_environment("AUTOTUNE").split(",", false):
+		var kv := pair.split("=")
+		if kv.size() == 2:
+			GameState.tuning_override[kv[0].strip_edges()] = float(kv[1])
+	for id: String in ids:
+		for bot: String in bots:
+			var wins := 0
+			var rounds_all := 0
+			var rounds_win := 0
+			var stuck := 0
+			var standing := 0
+			var boss_left := 0.0
+			for r in runs:
+				GameState.sim_setup(id, delta)
+				var res: Dictionary = await _auto_one(id, bot)
+				rounds_all += int(res["rounds"])
+				boss_left += float(res["boss_left"])
+				if res["stuck"]:
+					stuck += 1
+				elif res["win"]:
+					wins += 1
+					rounds_win += int(res["rounds"])
+					standing += int(res["standing"])
+			var lvl: int = int(GameState.SIM_SETUP[id]["level"]) + delta
+			print("AUTOBATTLE %-5s %-5s L%-2d  wins %2d/%-2d (%3.0f%%)  boss-hp-left %3.0f%%  rounds avg %4.1f  win-rounds %4.1f  standing %3.1f  stuck %d" % [
+				id, bot, lvl, wins, runs, 100.0 * wins / runs, 100.0 * boss_left / runs,
+				float(rounds_all) / runs,
+				float(rounds_win) / maxi(wins, 1),
+				float(standing) / maxi(wins, 1), stuck])
+	Engine.time_scale = 1.0
+	get_tree().quit()
+
+## Ein einzelner Bot-Kampf. "stuck" meldet einen Kampf, der nicht zu Ende kam.
+func _auto_one(id: String, bot: String) -> Dictionary:
+	_clear_screen()
+	await get_tree().process_frame
+	var battle := Battle.new()
+	battle.enemy_ids = [id]
+	battle.arena_theme = {"boss": "toxic", "boss2": "gold", "boss3": "hate", "boss4": "void"}.get(id, "toxic")
+	battle.auto_mode = bot
+	var outcome := {"done": false, "win": false}
+	battle.finished.connect(func(v: bool):
+		outcome["done"] = true
+		outcome["win"] = v)
+	add_child(battle)
+	current_screen = battle
+	var started := Time.get_ticks_msec()
+	while not outcome["done"] and Time.get_ticks_msec() - started < 120000:
+		await get_tree().process_frame
+	var standing := 0
+	for m in GameState.party:
+		if m["hp"] > 0:
+			standing += 1
+	var left := 0.0
+	for e in battle.enemies:
+		if e["is_boss"]:
+			left = clampf(float(e["hp"]) / float(e["max_hp"]), 0.0, 1.0)
+	return {"win": outcome["win"], "rounds": battle.round_no, "standing": standing,
+		"stuck": not outcome["done"], "boss_left": left}

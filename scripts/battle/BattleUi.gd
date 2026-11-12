@@ -89,6 +89,9 @@ func _build_ui() -> void:
 			used.size.x, maxi(int(used.size.y * 0.62), 1))
 		port.texture = at
 		port.custom_minimum_size = Vector2(34, 34)
+		# Ohne das bestimmt die (seit LPC viel größere) Textur die Zeilenhöhe —
+		# dann rutscht die dritte Party-Zeile unten aus dem Bild.
+		port.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		port.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		port.flip_h = true
 		pf.add_child(port)
@@ -153,7 +156,7 @@ func _make_bar(parent: Control, w: int, h: int, color: Color,
 ## Große Boss-HP-Leiste oben in der Mitte (erscheint beim Auftritt).
 func _build_boss_bar() -> void:
 	boss_bar_holder = Control.new()
-	boss_bar_holder.position = Vector2(270, 52)
+	boss_bar_holder.position = Vector2(270, 44)
 	boss_bar_holder.modulate.a = 0.0
 	ui_layer.add_child(boss_bar_holder)
 	var st := _style()
@@ -182,12 +185,88 @@ func _build_boss_bar() -> void:
 	boss_bar_fill.size = Vector2(418, 14)
 	boss_bar_fill.color = st["bar"]
 	bg.add_child(boss_bar_fill)
+	# Zustandszeile unter der Leiste: Aufladen, Goldschild, Mauer.
+	boss_note = Label.new()
+	boss_note.position = Vector2(0, 18)
+	boss_note.custom_minimum_size = Vector2(420, 0)
+	boss_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_note.add_theme_font_size_override("font_size", 15)
+	boss_note.add_theme_color_override("font_color", Color(1.0, 0.92, 0.6))
+	boss_note.add_theme_color_override("font_outline_color", Color.BLACK)
+	boss_note.add_theme_constant_override("outline_size", 5)
+	boss_bar_holder.add_child(boss_note)
+
+## Schreibt den aktuellen Boss-Zustand unter die Leiste (leer = nichts Besonderes).
+func _refresh_boss_note(e: Dictionary) -> void:
+	if boss_note == null:
+		return
+	var parts := []
+	if String(e.get("charge", "")) != "":
+		parts.append("CHARGING %s - DEFEND!" % String(e.get("charge_name", "")).to_upper())
+	if int(e.get("shield", 0)) > 0:
+		parts.append("GOLD SHIELD %d" % int(e["shield"]))
+	if int(e.get("wall", 0)) > 0:
+		parts.append("WALL OF HATE x%d" % int(e["wall"]))
+	boss_note.text = "   ".join(parts)
+
+## ---------- Statuseffekte der Helden ----------
+const STATUS_TEXT := {"poison": "Poisoned!", "isolated": "Cut off!", "silenced": "Silenced!"}
+const STATUS_COLOR := {"poison": Color(0.6, 1.0, 0.35), "isolated": Color(1.0, 0.5, 0.4),
+	"silenced": Color(0.8, 0.85, 0.95)}
+
+## Kürzel hinter der Party-Zeile, z. B. "  [PSN 2] [MUTE 1]".
+func _status_tags(h: Dictionary) -> String:
+	var out := ""
+	var stt: Dictionary = h.get("status", {})
+	for k: String in stt:
+		if int(stt[k]) > 0:
+			out += " [%s %d]" % [STATUS_TAG.get(k, k), int(stt[k])]
+	return (" " + out) if out != "" else ""
+
+func _add_status(h: Dictionary, st: String, turns: int) -> void:
+	if h["data"]["hp"] <= 0:
+		return
+	if not h.has("status"):
+		h["status"] = {}
+	h["status"][st] = maxi(int(h["status"].get(st, 0)), turns)
+	_float_text(h["sprite"].position + Vector2(0, -36), STATUS_TEXT.get(st, st),
+		STATUS_COLOR.get(st, Color.WHITE), 22)
+	_refresh_party()
+
+## Jede Heilung spült das Gift aus.
+func _cure_poison(h: Dictionary) -> void:
+	if _has_status(h, "poison"):
+		h["status"].erase("poison")
+		_float_text(h["sprite"].position + Vector2(0, -36), "Cured", Color(0.7, 1.0, 0.8), 20)
+		_refresh_party()
+
+## Zu Beginn des eigenen Zuges: Gift zehrt (tötet aber nie), Zähler laufen ab.
+func _tick_status(h: Dictionary) -> void:
+	var stt: Dictionary = h.get("status", {})
+	if stt.is_empty() or h["data"]["hp"] <= 0:
+		return
+	if _has_status(h, "poison"):
+		var d: Dictionary = h["data"]
+		var dmg := mini(maxi(int(d["max_hp"] * 0.07), 3), d["hp"] - 1)
+		if dmg > 0:
+			d["hp"] -= dmg
+			_say("The poison eats at %s." % d["name"])
+			_float_text(h["sprite"].position, str(dmg), Color(0.6, 1.0, 0.35), 24)
+			_burst(h["sprite"].position, Color(0.5, 0.95, 0.3), 6, 70)
+			AudioManager.play_sfx("splat")
+			await get_tree().create_timer(0.55).timeout
+	for k: String in stt.keys():
+		stt[k] = int(stt[k]) - 1
+		if int(stt[k]) <= 0:
+			stt.erase(k)
+	_refresh_party()
 
 func _refresh_party() -> void:
 	for h in heroes:
 		var d: Dictionary = h["data"]
-		h["hp_label"].text = "%-7s Lv%2d  HP %3d/%3d  MP %2d/%2d" % \
-			[d["name"], d.get("level", 1), d["hp"], d["max_hp"], d["mp"], d["max_mp"]]
+		h["hp_label"].text = "%-7s Lv%2d  HP %3d/%3d  MP %2d/%2d%s" % \
+			[d["name"], d.get("level", 1), d["hp"], d["max_hp"], d["mp"], d["max_mp"],
+			_status_tags(h)]
 		h["hp_label"].add_theme_color_override("font_color",
 			Color(1, 0.4, 0.4) if d["hp"] <= d["max_hp"] / 4 else Color.WHITE)
 		var hp_ratio: float = float(d["hp"]) / float(d["max_hp"])
@@ -229,6 +308,10 @@ func _ally_entries() -> Array:
 
 
 func _menu(entries: Array, h: Dictionary, dim_indices: Array = []) -> int:
+	# Balancing-Bot: die Antwort steht schon in der Warteschlange.
+	if auto_mode != "":
+		await get_tree().process_frame
+		return int(auto_queue.pop_front()) if not auto_queue.is_empty() else -1
 	_highlight_hero(h, true)
 	current_menu = entries
 	menu_dim = dim_indices
@@ -377,6 +460,10 @@ func _pick_enemy() -> int:
 			alive.append(i)
 	if alive.size() == 1:
 		return alive[0]
+	if auto_mode != "":
+		await get_tree().process_frame
+		var want: int = int(auto_queue.pop_front()) if not auto_queue.is_empty() else alive[0]
+		return want if alive.has(want) else alive[0]
 	current_menu = alive
 	menu_index = 0
 	ui_state = "target"
@@ -414,9 +501,29 @@ func _item_menu(h: Dictionary) -> bool:
 	var item_name: String = names[pick]
 	var item: Dictionary = GameState.ITEMS[item_name]
 	var td: Dictionary = heroes[target]["data"]
+	var is_revive: bool = item.get("revive", false)
+	var fallen: bool = td["hp"] <= 0
+	# Gefallene holt nur ein Revive zurück; Isolierte erreicht gar nichts.
+	var refuse := ""
+	if _has_status(heroes[target], "isolated") and (is_revive or item["hp"] > 0):
+		refuse = "%s is cut off — nothing gets through!" % td["name"]
+	elif is_revive and not fallen:
+		refuse = "%s is still standing." % td["name"]
+	elif fallen and not is_revive:
+		refuse = "%s has fallen — only a Revive can help now." % td["name"]
+	if refuse != "":
+		_say(refuse)
+		AudioManager.play_sfx("error")
+		await get_tree().create_timer(0.8).timeout
+		return false
 	GameState.use_item(item_name)
+	if is_revive:
+		td["hp"] = maxi(int(td["max_hp"] * 0.5), 1)
+		heroes[target]["status"] = {}
 	td["hp"] = mini(td["hp"] + item["hp"], td["max_hp"])
 	td["mp"] = mini(td["mp"] + item["mp"], td["max_mp"])
+	if item["hp"] > 0:
+		_cure_poison(heroes[target])
 	# Falls das Item einen Gefallenen zurückholt: aufrappeln lassen.
 	_restore_if_revived(heroes[target])
 	AudioManager.play_sfx("heal")

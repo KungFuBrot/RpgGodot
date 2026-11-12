@@ -82,9 +82,36 @@ var shock_live := false
 var ui_layer: CanvasLayer
 var boss_bar_fill: ColorRect
 var boss_bar_holder: Control
+var boss_note: Label       # Zeile unter der Boss-Leiste: Aufladen, Schild, Mauer
+var round_no := 0          # laufende Rundennummer (1 = erste Runde)
+
+## Balancing-Bot (env AUTOBATTLE): "" = Mensch spielt, sonst "smart" | "naive".
+## Der Bot plant den ganzen Zug voraus und legt die Menü-Antworten in die
+## Warteschlange; _menu und _pick_enemy ziehen sie dort ab.
+var auto_mode := ""
+var auto_queue: Array = []
+
+## Statuseffekte der Helden: h["status"] = {name: verbleibende Züge}.
+##   poison   Schaden zu Beginn des eigenen Zuges, endet durch jede Heilung
+##   isolated kann weder geheilt noch wiederbelebt werden
+##   silenced Fähigkeiten-Menü gesperrt
+const STATUS_TAG := {"poison": "PSN", "isolated": "CUT", "silenced": "MUTE"}
+
+func _has_status(h: Dictionary, st: String) -> bool:
+	return int((h.get("status", {}) as Dictionary).get(st, 0)) > 0
 
 func _say(text: String) -> void:
 	msg_label.text = text
+	# Balancing-Lauf mit env AUTOLOG: Kampfprotokoll samt LP-Stand mitschreiben.
+	if auto_mode != "" and text != "" and OS.get_environment("AUTOLOG") != "":
+		var hp := []
+		for h in heroes:
+			hp.append("%d/%d" % [h["data"]["hp"], h["data"]["mp"]])
+		var ehp := []
+		for e in enemies:
+			if e["alive"]:
+				ehp.append(str(e["hp"]))
+		print("  R%-2d [%s | %s] %s" % [round_no, " ".join(hp), " ".join(ehp), text])
 
 ## Beendet die Deckung (verfällt zu Beginn des nächsten eigenen Zuges).
 func _end_defend(h: Dictionary) -> void:

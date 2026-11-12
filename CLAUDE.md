@@ -55,6 +55,23 @@ selbst oder ihren Vorfahren (weiter oben) aufrufen**, nie nach unten:
 
 Neue geteilte Helfer gehören nach `BattleFx` (visuell) bzw. `BattleBase` (Zustand).
 
+### Boss-Mechanik und Schwierigkeit
+
+- Stellschrauben stehen zentral in `GameState.BOSS_TUNING` / `MOB_TUNING`
+  (Faktoren auf die Grundwerte in `ENEMIES`). Nie von Hand raten — mit dem
+  Bot nachmessen (`AUTOBATTLE`, siehe Befehle).
+- Bosse handeln 2× pro Runde (`Battle._run_battle`). `_boss_plan` in
+  `BattleEnemyActions` entscheidet: Großangriffe (Flächenangriff, Ultimates)
+  werden mit der LETZTEN Aktion einer Runde aufgeladen und mit der ERSTEN der
+  nächsten entfesselt — die Helden haben immer eine Runde zum Verteidigen.
+- Signaturzüge (`_boss_signature`): Gift (Schlotbaron), MP-Steuer +
+  Goldschild in der Wut (Monopolfürst), Mauer des Hasses + Isolation (Spalter),
+  Schweigen + zwei Schemen ab 50 % (Die Stille).
+- Helden-Status in `h["status"]` (`_add_status`, `_tick_status`,
+  `_cure_poison` in `BattleUi`). „Defend" dämpft auf 35 % und gibt MP zurück.
+- Gefallene holt nur das Item „Revive" zurück. Nach einer Niederlage geht es
+  mit dem Stand von vor dem Kampf weiter (`GameState.snapshot`/`restore`).
+
 ### SpriteFactory-Kette (`scripts/sprites/` + `scripts/SpriteFactory.gd`)
 
 `SpriteFactoryLib` (Asset-Loader, Kacheln, Gelände-Übergänge, Pixel-Helfer) →
@@ -139,6 +156,12 @@ godot --headless --quit --path .            # Spielstart kompiliert alle Skripte
 # Runtime-Smoke-Test: spielt alle Kampf-Fähigkeiten automatisch durch
 # (headless schlagen nur die save_png-Screenshots fehl — das ist ok):
 $env:SPELLSHOT = "$env:TEMP\shots"; godot --headless --path .
+
+# Balancing: Bot spielt jeden Boss im Zeitraffer und druckt Siegquote/Runden.
+# Ziel: "smart" 70-90 % Siege, "naive" (nur Angriff) unter 25 %.
+# Optional: AUTORUNS=30, AUTOBOT=smart|naive, AUTOLEVEL=-1, AUTOLOG=1 (Protokoll),
+# AUTOTUNE="hp=1.6,atk=1.2" (Werte probeweise überschreiben).
+$env:AUTOBATTLE = "all"; godot --headless --path .
 
 # Bildtour MIT Fenster (headless kann den Viewport nicht speichern):
 # Titel, Intro, alle Karten, Arenen und Bosse -> shots/now/

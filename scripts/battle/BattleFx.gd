@@ -641,6 +641,10 @@ func _shake_camera(strength := 1.0) -> void:
 
 ## Kurze Zeitlupe beim Aufprall — lässt Treffer wuchtig wirken.
 func _hitstop(dur: float) -> void:
+	# Der Balancing-Bot läuft im Zeitraffer — dort gibt es keinen Hit-Stop,
+	# sonst stünde die Zeitskala danach wieder auf 1.
+	if auto_mode != "":
+		return
 	Engine.time_scale = 0.05
 	await get_tree().create_timer(dur, true, false, true).timeout
 	Engine.time_scale = 1.0

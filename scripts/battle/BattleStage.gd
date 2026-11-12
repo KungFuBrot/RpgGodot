@@ -369,66 +369,9 @@ func _build_scene() -> void:
 	# offenen Dungeons mit (GameState.enemy_multiplier), egal in welcher
 	# Reihenfolge man vorgeht. Boss inklusive, damit auch er mitskaliert.
 	for i in enemy_ids.size():
-		var def: Dictionary = GameState.ENEMIES[enemy_ids[i]]
-		var is_boss: bool = def.get("boss", false)
-		var mul := GameState.enemy_multiplier(def.get("tier", 0))
-		var e_hp: int = int(round(def["hp"] * mul))
-		var e_atk: int = int(round(def["atk"] * mul))
-		var e_def: int = int(round(def["def"] * mul))
-		var e_gold: int = int(round(def["gold"] * mul))
-		var e_xp: int = int(round(def.get("xp", 0) * mul))
-		var s := Sprite2D.new()
-		s.texture = SpriteFactory.enemy(def["sprite"])
-		# Der finale Boss „Die Stille" (dunkles Spinnentier) thront breit und
-		# bedrohlich über den anderen — sein Sprite ist zudem breiter angelegt.
-		# Derselbe Maßstab wie bei den Helden: die Größe steckt in der Leinwand
-		# des Rigs (Monster 52x52, Boss 112x128), nicht in der Vergrößerung —
-		# nur so ist ein Pixel bei allen Figuren gleich groß.
-		s.scale = Vector2(RigFactory.BATTLE_SCALE, RigFactory.BATTLE_SCALE)
-		s.set_meta("base_scale", s.scale)
-		var home := Vector2(222, 222) if is_boss else Vector2(225 + (i % 2) * 100, 180 + i * 88)
-		s.position = home - Vector2(500, 0)
-		var refl: Sprite2D
-		var mist: CPUParticles2D = null
-		if is_boss:
-			var foot: float = s.texture.get_height() * 0.5 + 0.5
-			_attach_shadow(s, 13, 3, foot)
-			_attach_glow_pool(s, foot, pal["pool_enemy"])
-			refl = _attach_reflection(s, foot, 0.10)
-			_attach_boss_aura(s, def.get("theme", "toxic"))
-			_attach_boss_life(s, def.get("theme", "toxic"), def["sprite"])
-			# Träges Gewichts-Schwanken — der Koloss steht nie ganz still.
-			var sway := create_tween().set_loops()
-			sway.tween_property(s, "rotation", 0.015, 2.2) \
-				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			sway.tween_property(s, "rotation", -0.015, 2.2) \
-				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		else:
-			var foot_e: float = s.texture.get_height() * 0.5 - 1.0
-			_attach_shadow(s, 9, 3, foot_e)
-			_attach_glow_pool(s, foot_e, pal["pool_enemy"])
-			refl = _attach_reflection(s, foot_e)
-			mist = _attach_menace(s, home, foot_e)
-		# Themen-Tönung, zusätzlich abgedunkelt und leicht ins Violette
-		# entsättigt — die Monster lauern im Halbdunkel. Die Spiegelung
-		# erbt die Färbung als Kind automatisch.
-		# Die Themen-Tönung aus ENEMIES entfällt: sie war dafür da, graue
-		# DTII-Fremdsprites einzufärben. Die Rig-Monster bringen ihre Farben
-		# selbst mit; geblieben ist nur das atmosphärische Abdunkeln.
-		# Kaum noch Abdunklung: die Rig-Monster haben eigene, teils dunkle
-		# Farben, und Grundlicht plus Vignette nehmen ohnehin schon viel weg.
-		var dark := Color(1.0, 1.0, 1.0) if is_boss else Color(0.96, 0.94, 0.98)
-		var tint := dark
-		s.modulate = tint
-		s.set_meta("tint", tint)
-		add_child(s)
-		enemies.append({"anim": "idle", "name": def["name"], "hp": e_hp, "max_hp": e_hp,
-			"atk": e_atk, "def": e_def, "gold": e_gold, "xp": e_xp,
-			"sprite": s, "home": home, "alive": true, "is_boss": is_boss,
-			"id": def["sprite"], "frame": 0, "acts": 0, "enraged": false, "refl": refl,
-			"tint": tint, "proj": def.get("proj", ""), "mist": mist,
-			"attack_line": def.get("attack_line", ""),
-			"special": def.get("special", {})})
+		var boss_slot: bool = GameState.ENEMIES[enemy_ids[i]].get("boss", false)
+		var spot := Vector2(222, 222) if boss_slot else Vector2(225 + (i % 2) * 100, 180 + i * 88)
+		enemies.append(_make_enemy(enemy_ids[i], spot))
 
 ## Lebendiger Himmel über der Arena: pulsierende Glut in der Höhle,
 ## wogende Aurora-Bänder in der Frostgrotte.
@@ -957,23 +900,7 @@ func _start_idle_animations() -> void:
 	# Jede Figur taktet ihre Frames eigenständig und leicht unterschiedlich
 	# schnell — im globalen Gleichtakt wirkte die Szene wie ein starres GIF.
 	for e in enemies:
-		_unit_ticker(randf_range(0.13, 0.19), func():
-			# Auch Gefallene takten weiter — sonst friert der Zusammenbruch
-			# mitten in der Bewegung ein.
-			var anim: String = e.get("anim", "idle")
-			if not e["alive"] and anim != "down":
-				return
-			# Atmen läuft auf einem Drittel des Takts: mit voller Rate wirkte
-			# es hektisch. Aktionen (Angriff, Treffer) behalten das Tempo.
-			if anim == "idle":
-				e["tick"] = int(e.get("tick", 0)) + 1
-				if int(e["tick"]) % 3 != 0:
-					return
-			e["frame"] = (e["frame"] + 1) % RigFactory.mon_frames(anim, e["id"])
-			var tex := SpriteFactory.enemy_frame(e["id"], e["frame"], anim)
-			(e["sprite"] as Sprite2D).texture = tex
-			if is_instance_valid(e["refl"]):
-				(e["refl"] as Sprite2D).texture = tex)
+		_start_enemy_ticker(e)
 	for h in heroes:
 		_unit_ticker(randf_range(0.13, 0.19), func():
 			if h["data"]["hp"] > 0:
@@ -1217,3 +1144,94 @@ func _boss_snort(e: Dictionary) -> void:
 	var tw := create_tween()
 	tw.tween_property(s, "rotation", -0.05, 0.1).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(s, "rotation", 0.0, 0.25).set_trans(Tween.TRANS_SINE)
+
+## Bild-Ticker eines Gegners (auch für nachträglich gerufene Verstärkung).
+func _start_enemy_ticker(e: Dictionary) -> void:
+	_unit_ticker(randf_range(0.13, 0.19), func():
+		# Auch Gefallene takten weiter — sonst friert der Zusammenbruch
+		# mitten in der Bewegung ein.
+		var anim: String = e.get("anim", "idle")
+		if not e["alive"] and anim != "down":
+			return
+		# Atmen läuft auf einem Drittel des Takts: mit voller Rate wirkte
+		# es hektisch. Aktionen (Angriff, Treffer) behalten das Tempo.
+		if anim == "idle":
+			e["tick"] = int(e.get("tick", 0)) + 1
+			if int(e["tick"]) % 3 != 0:
+				return
+		e["frame"] = (e["frame"] + 1) % RigFactory.mon_frames(anim, e["id"])
+		var tex := SpriteFactory.enemy_frame(e["id"], e["frame"], anim)
+		(e["sprite"] as Sprite2D).texture = tex
+		if is_instance_valid(e["refl"]):
+			(e["refl"] as Sprite2D).texture = tex)
+
+## Baut einen Gegner samt Schatten, Spiegelung und Aura und liefert seinen
+## Kampf-Eintrag. Eigene Funktion, damit Bosse mitten im Kampf Verstärkung
+## rufen können (Die Stille, siehe BattleBossCine._boss4_phase).
+func _make_enemy(id: String, home: Vector2) -> Dictionary:
+	var def: Dictionary = GameState.ENEMIES[id]
+	var is_boss: bool = def.get("boss", false)
+	var mul := GameState.enemy_multiplier(def.get("tier", 0))
+	# Schwierigkeit: Bosse und normale Gegner bekommen ihren Faktor aus
+	# GameState.BOSS_TUNING bzw. MOB_TUNING obendrauf.
+	var tune: Dictionary = GameState.boss_tuning(id) if is_boss else GameState.MOB_TUNING
+	var e_hp: int = int(round(def["hp"] * mul * float(tune["hp"])))
+	var e_atk: int = int(round(def["atk"] * mul * float(tune["atk"])))
+	var e_def: int = int(round(def["def"] * mul))
+	var e_gold: int = int(round(def["gold"] * mul))
+	var e_xp: int = int(round(def.get("xp", 0) * mul))
+	var s := Sprite2D.new()
+	s.texture = SpriteFactory.enemy(def["sprite"])
+	# Der finale Boss „Die Stille" (dunkles Spinnentier) thront breit und
+	# bedrohlich über den anderen — sein Sprite ist zudem breiter angelegt.
+	# Derselbe Maßstab wie bei den Helden: die Größe steckt in der Leinwand
+	# des Rigs (Monster 52x52, Boss 112x128), nicht in der Vergrößerung —
+	# nur so ist ein Pixel bei allen Figuren gleich groß.
+	s.scale = Vector2(RigFactory.BATTLE_SCALE, RigFactory.BATTLE_SCALE)
+	s.set_meta("base_scale", s.scale)
+	s.position = home - Vector2(500, 0)
+	var refl: Sprite2D
+	var mist: CPUParticles2D = null
+	if is_boss:
+		var foot: float = s.texture.get_height() * 0.5 + 0.5
+		_attach_shadow(s, 13, 3, foot)
+		_attach_glow_pool(s, foot, _palette()["pool_enemy"])
+		refl = _attach_reflection(s, foot, 0.10)
+		_attach_boss_aura(s, def.get("theme", "toxic"))
+		_attach_boss_life(s, def.get("theme", "toxic"), def["sprite"])
+		# Träges Gewichts-Schwanken — der Koloss steht nie ganz still.
+		var sway := create_tween().set_loops()
+		sway.tween_property(s, "rotation", 0.015, 2.2) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		sway.tween_property(s, "rotation", -0.015, 2.2) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	else:
+		var foot_e: float = s.texture.get_height() * 0.5 - 1.0
+		_attach_shadow(s, 9, 3, foot_e)
+		_attach_glow_pool(s, foot_e, _palette()["pool_enemy"])
+		refl = _attach_reflection(s, foot_e)
+		mist = _attach_menace(s, home, foot_e)
+	# Themen-Tönung, zusätzlich abgedunkelt und leicht ins Violette
+	# entsättigt — die Monster lauern im Halbdunkel. Die Spiegelung
+	# erbt die Färbung als Kind automatisch.
+	# Die Themen-Tönung aus ENEMIES entfällt: sie war dafür da, graue
+	# DTII-Fremdsprites einzufärben. Die Rig-Monster bringen ihre Farben
+	# selbst mit; geblieben ist nur das atmosphärische Abdunkeln.
+	# Kaum noch Abdunklung: die Rig-Monster haben eigene, teils dunkle
+	# Farben, und Grundlicht plus Vignette nehmen ohnehin schon viel weg.
+	var dark := Color(1.0, 1.0, 1.0) if is_boss else Color(0.96, 0.94, 0.98)
+	var tint := dark
+	s.modulate = tint
+	s.set_meta("tint", tint)
+	add_child(s)
+	return {"anim": "idle", "name": def["name"], "hp": e_hp, "max_hp": e_hp,
+		"atk": e_atk, "def": e_def, "gold": e_gold, "xp": e_xp,
+		"sprite": s, "home": home, "alive": true, "is_boss": is_boss,
+		"id": def["sprite"], "frame": 0, "acts": 0, "enraged": false, "refl": refl,
+		"tint": tint, "proj": def.get("proj", ""), "mist": mist,
+		"attack_line": def.get("attack_line", ""),
+		"special": def.get("special", {}),
+		# Boss-Mechanik (Stufe 1): ENEMIES-Schlüssel, laufende Aufladung, Runden-
+		# und Signaturzähler, Goldschild (absorbiert Schaden), Mauer (Treffer bis
+		# zum Bruch).
+		"key": id, "charge": "", "rounds": 0, "sig": 0, "shield": 0, "wall": 0}

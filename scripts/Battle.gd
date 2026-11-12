@@ -66,6 +66,18 @@ func _boss_showcase() -> void:
 	await get_tree().create_timer(0.35).timeout
 	_snap(dir, "boss_antic_" + suffix)
 	await get_tree().create_timer(1.0).timeout
+	# Boss-Mechanik prüfen: Signaturzug (Status in der Party-Leiste), dann
+	# Aufladen mit Aura und Hinweis unter der Boss-Leiste.
+	if boss_bar_holder != null:
+		boss_bar_holder.modulate.a = 1.0
+	round_no = 1
+	await _boss_signature(e, heroes)
+	_snap(dir, "boss_sig_" + suffix)
+	await _boss_charge(e, "aoe")
+	_snap(dir, "boss_charge_" + suffix)
+	e["charge"] = ""
+	_end_charge_fx(e)
+	_refresh_boss_note(e)
 	await _boss_aoe(e, heroes)
 	_snap(dir, "boss_aoe_" + suffix)
 	await get_tree().create_timer(0.5).timeout
@@ -280,9 +292,12 @@ func _run_battle() -> void:
 		_say("Monsters attack!")
 	await get_tree().create_timer(0.9).timeout
 	while true:
+		round_no += 1
 		for h in heroes:
 			if h["data"]["hp"] <= 0 or not _any_enemy_alive():
 				continue
+			# Gift zehrt, Statuszähler laufen ab — vor der Befehlswahl.
+			await _tick_status(h)
 			# Nur wer dran ist, steht in voller Farbe da — alle anderen sind
 			# ausgegraut. Das ersetzt den früheren Pfeil über der Figur.
 			for other in heroes:
@@ -303,7 +318,12 @@ func _run_battle() -> void:
 		for e in enemies:
 			if not e["alive"]:
 				continue
-			await _enemy_turn(e)
+			# Bosse handeln mehrfach pro Runde (GameState.BOSS_TUNING).
+			var acts: int = int(GameState.boss_tuning(e["key"])["actions"]) if e["is_boss"] else 1
+			for slot in acts:
+				if not e["alive"] or not GameState.party_alive():
+					break
+				await _enemy_turn(e, slot, slot == acts - 1)
 			if not GameState.party_alive():
 				await _defeat()
 				return
@@ -312,9 +332,17 @@ func _hero_turn(h: Dictionary) -> bool:
 	var d: Dictionary = h["data"]
 	# Zu Beginn des eigenen Zuges verfällt die Deckung des letzten Zuges.
 	_end_defend(h)
+	var silenced := _has_status(h, "silenced")
+	var tries := 0
 	while true:
-		var cmd: int = await _menu([d["name"] + ":  Attack", "Ability",
-			"Defend", "Item", "Flee"], h)
+		# Balancing-Bot: Zug vorausplanen. Scheitert ein Plan zweimal (z. B. an
+		# einer Regel, die der Bot nicht kennt), geht er als Notnagel in Deckung.
+		if auto_mode != "":
+			tries += 1
+			auto_queue = _bot_plan(h) if tries <= 2 else [2]
+		var cmd: int = await _menu([d["name"] + ":  Attack",
+			"Ability (sealed)" if silenced else "Ability",
+			"Defend", "Item", "Flee"], h, [1] if silenced else [])
 		match cmd:
 			0:
 				var t := await _pick_enemy()
@@ -328,6 +356,10 @@ func _hero_turn(h: Dictionary) -> bool:
 				_resume_bob(h, 2.0)
 				return false
 			1:
+				if silenced:
+					_say("%s is silenced — abilities are sealed!" % d["name"])
+					AudioManager.play_sfx("error")
+					continue
 				var used_ab: bool = await _ability_menu(h)
 				if used_ab: return false
 			2:
@@ -356,7 +388,15 @@ func _defend(h: Dictionary) -> void:
 	h["defending"] = true
 	# Deckungspose hält bis zum nächsten eigenen Zug.
 	_pose(h, "block", 6.0)
-	_say("%s takes cover — the next hit will be softened." % h["data"]["name"])
+	# Deckung ist kein verlorener Zug: wer sich sammelt, gewinnt etwas MP zurück.
+	var hd: Dictionary = h["data"]
+	var regain := mini(maxi(int(hd["max_mp"] * 0.12), 2), hd["max_mp"] - hd["mp"])
+	hd["mp"] += regain
+	if regain > 0:
+		_float_text((h["sprite"] as Sprite2D).position + Vector2(0, -30), "+%d MP" % regain,
+			Color(0.55, 0.7, 1.0), 22)
+		_refresh_party()
+	_say("%s takes cover and gathers focus — the next hit will be softened." % hd["name"])
 	AudioManager.play_sfx("charge")
 	var s: Sprite2D = h["sprite"]
 	var base: Vector2 = s.get_meta("base_scale", s.scale)
@@ -511,6 +551,15 @@ func _ability_menu(h: Dictionary) -> bool:
 			var a: int = await _menu(_ally_entries(), h)
 			if a < 0:  # B/X = Zurück, ohne MP zu verbrauchen
 				return false
+			# Gefallene holt nur ein Revive zurück; Isolierte erreicht nichts.
+			if heroes[a]["data"]["hp"] <= 0:
+				_say("%s has fallen — only a Revive can help now." % heroes[a]["data"]["name"])
+				AudioManager.play_sfx("error")
+				return false
+			if _has_status(heroes[a], "isolated"):
+				_say("%s is cut off — nothing gets through!" % heroes[a]["data"]["name"])
+				AudioManager.play_sfx("error")
+				return false
 			d["mp"] -= ab["cost"]
 			_refresh_party()
 			_pause_bob(h)
@@ -519,6 +568,7 @@ func _ability_menu(h: Dictionary) -> bool:
 			else:
 				await _heal_ally(h, ab, heroes[a])
 			_resume_bob(h, 2.0)
+			_cure_poison(heroes[a])
 			_restore_if_revived(heroes[a])
 	return true
 
@@ -683,3 +733,128 @@ func _defeat() -> void:
 	AudioManager.play_music("defeat")
 	await get_tree().create_timer(2.5).timeout
 	finished.emit(false)
+
+## ---------- Balancing-Bot (env AUTOBATTLE, siehe Main._auto_series) ----------
+## Liefert die Menü-Antworten für einen ganzen Heldenzug. Hauptmenü:
+## 0 Attack, 1 Ability, 2 Defend, 3 Item. Fähigkeiten-Menü: erst die
+## Fähigkeiten, dann die Beschwörungen, dann die Ultimative.
+##   "smart" spielt wie ein aufmerksamer Mensch: holt Gefallene zurück, geht
+##           bei angekündigten Großangriffen in Deckung, heilt rechtzeitig.
+##   "naive" drischt nur drauf — damit lässt sich belegen, dass Taktik nötig ist.
+
+## Geschätzte Wucht je Fähigkeitsart (Mehrfachtreffer stehen nicht in "power").
+const BOT_SCORE := {"dance": 62, "pierce": 30, "lance": 48, "nuke": 50}
+
+func _bot_plan(h: Dictionary) -> Array:
+	if auto_mode != "smart":
+		return _bot_offense(h, false)
+	var d: Dictionary = h["data"]
+	var inv: Dictionary = GameState.inventory
+	# 1) Gefallene zurückholen.
+	if inv.get("Revive", 0) > 0:
+		for i in heroes.size():
+			if heroes[i]["data"]["hp"] <= 0 and not _has_status(heroes[i], "isolated"):
+				return _bot_item("Revive", i)
+	var charging := false
+	for e in enemies:
+		if e["alive"] and String(e.get("charge", "")) != "":
+			charging = true
+	# 2) Heilen: schwächstes erreichbares Mitglied — vor einem Großangriff früher.
+	var low := -1
+	var low_ratio := 1.0
+	for i in heroes.size():
+		var hd: Dictionary = heroes[i]["data"]
+		if hd["hp"] <= 0 or _has_status(heroes[i], "isolated"):
+			continue
+		var ratio := float(hd["hp"]) / float(hd["max_hp"])
+		if ratio < low_ratio:
+			low_ratio = ratio
+			low = i
+	# Vor einem Großangriff nur im Notfall heilen (wer in Deckung geht, übersteht
+	# ihn auch angeschlagen) — sonst heilen sich alle gegenseitig, statt sich zu
+	# schützen.
+	if low >= 0 and low_ratio < (0.3 if charging else 0.4):
+		var heal := _bot_heal(h, low)
+		if not heal.is_empty():
+			return heal
+	# 3) Angekündigter Großangriff: in Deckung.
+	if charging:
+		return [2]
+	# 4) Leere Zauberer füllen nach.
+	if d["id"] != "serena" and d["mp"] < 5 and inv.get("Ether", 0) > 0:
+		return _bot_item("Ether", heroes.find(h))
+	return _bot_offense(h, true)
+
+func _bot_item(item_name: String, target: int) -> Array:
+	return [3, GameState.inventory.keys().find(item_name), target]
+
+func _bot_heal(h: Dictionary, target: int) -> Array:
+	var d: Dictionary = h["data"]
+	if not _has_status(h, "silenced"):
+		var abilities: Array = d["abilities"]
+		for i in abilities.size():
+			var ab: Dictionary = abilities[i]
+			if ab["target"] == "ally" and GameState.skill_unlocked(d, ab) and d["mp"] >= ab["cost"]:
+				return [1, i, target]
+	var td: Dictionary = heroes[target]["data"]
+	var inv: Dictionary = GameState.inventory
+	if inv.get("Elixir", 0) > 0 and td["max_hp"] - td["hp"] > 60:
+		return _bot_item("Elixir", target)
+	if inv.get("Potion", 0) > 0:
+		return _bot_item("Potion", target)
+	if inv.get("Elixir", 0) > 0:
+		return _bot_item("Elixir", target)
+	return []
+
+## Stärkster bezahlbarer Angriff. keep_reserve: Heiler behalten MP für eine Heilung.
+func _bot_offense(h: Dictionary, keep_reserve: bool) -> Array:
+	var d: Dictionary = h["data"]
+	var alive := []
+	for i in enemies.size():
+		if enemies[i]["alive"]:
+			alive.append(i)
+	# Ziel: erst die Verstärkung (wenig LP), dann der Boss.
+	var tgt: int = alive[0]
+	for i: int in alive:
+		if enemies[i]["hp"] < enemies[tgt]["hp"]:
+			tgt = i
+	var pick_target := [tgt] if alive.size() > 1 else []
+	if _has_status(h, "silenced"):
+		return [0] + pick_target
+	var abilities: Array = d["abilities"]
+	var summons: Array = d.get("summons", [])
+	if not (d.get("ultimate", {}) as Dictionary).is_empty() and not h["ult_used"]:
+		return [1, abilities.size() + summons.size()]
+	var reserve := 0
+	if keep_reserve:
+		for ab: Dictionary in abilities:
+			if ab["target"] == "ally" and GameState.skill_unlocked(d, ab):
+				reserve = ab["cost"]
+	for i in range(summons.size() - 1, -1, -1):
+		var sm: Dictionary = summons[i]
+		if GameState.skill_unlocked(d, sm) and not _once_used(h, sm) \
+				and d["mp"] - sm["cost"] >= reserve:
+			return [1, abilities.size() + i]
+	var best := -1
+	var best_score := 0.0
+	for i in abilities.size():
+		var ab: Dictionary = abilities[i]
+		if ab["target"] == "ally" or not GameState.skill_unlocked(d, ab):
+			continue
+		if ab.get("once", false) and _once_used(h, ab):
+			continue
+		if d["mp"] - ab["cost"] < reserve:
+			continue
+		var score: float = float(BOT_SCORE.get(ab["kind"], ab["power"]))
+		if ab["target"] == "all":
+			score *= float(alive.size()) if alive.size() > 1 else 0.85
+		# MP nicht verschleudern: teure Zauber müssen sich lohnen.
+		score -= float(ab["cost"]) * 0.6
+		if score > best_score:
+			best_score = score
+			best = i
+	if best < 0:
+		return [0] + pick_target
+	if abilities[best]["target"] == "one":
+		return [1, best] + pick_target
+	return [1, best]

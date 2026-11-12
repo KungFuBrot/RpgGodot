@@ -45,11 +45,30 @@ func _boss4_phase(e: Dictionary) -> void:
 		cv.parallel().tween_property(sh, "scale", Vector2(0.05, 0.05), 0.5)
 		cv.tween_callback(sh.queue_free)
 	await get_tree().create_timer(1.1).timeout
+	# Aus dem Grau lösen sich zwei Schemen und stellen sich vor die Stille.
+	_say("Two shades peel themselves out of the gray.")
+	AudioManager.play_sfx("summon")
+	for spot: Vector2 in [Vector2(410, 150), Vector2(420, 322)]:
+		var add: Dictionary = _make_enemy("grauschemen", spot)
+		enemies.append(add)
+		var asp: Sprite2D = add["sprite"]
+		asp.position = spot + Vector2(-40, 0)
+		asp.modulate.a = 0.0
+		var at := create_tween()
+		at.tween_property(asp, "position", spot, 0.5) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		at.parallel().tween_property(asp, "modulate:a", 1.0, 0.5)
+		_burst(spot, Color(0.7, 0.75, 0.85), 10, 110)
+		_start_enemy_ticker(add)
+	await get_tree().create_timer(0.7).timeout
+	for add2 in enemies:
+		if not add2["is_boss"] and add2["alive"] and add2.get("bob") == null:
+			add2["bob"] = _idle_bob(add2["sprite"], 1.7)
 
 ## Wut-Phase des Bosses: Aufschrei, Färbung, mehr Angriff (Farbe je Thema).
 func _boss_enrage(e: Dictionary) -> void:
 	e["enraged"] = true
-	e["atk"] = int(e["atk"] * 1.35)
+	e["atk"] = int(e["atk"] * float(GameState.boss_tuning(e.get("key", "boss"))["rage_atk"]))
 	# „Die Stille" wird nicht wütend — die Leere um sie herum vertieft sich nur.
 	if boss_def.get("theme", "") == "void":
 		await _boss4_phase(e)
@@ -77,6 +96,15 @@ func _boss_enrage(e: Dictionary) -> void:
 	_burst(es.position, st["burst"], 22, 190)
 	AudioManager.play_sfx("roar")
 	await get_tree().create_timer(1.0).timeout
+	# Der Monopolfürst kauft sich in der Not frei: ein Goldschild, das erst
+	# abgetragen werden muss.
+	if boss_def.get("theme", "") == "gold":
+		e["shield"] = int(e["max_hp"] * 0.14)
+		_say("%s buys himself a Golden Parachute!" % e["name"])
+		AudioManager.play_sfx("coin")
+		_burst(es.position, Color(1.0, 0.85, 0.3), 26, 200)
+		_refresh_boss_note(e)
+		await get_tree().create_timer(1.0).timeout
 
 ## Inszenierter Boss-Tod: Zeitlupe, Explosionskette, weißer Blitz, Zerfall.
 func _boss_death(e: Dictionary) -> void:

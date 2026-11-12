@@ -528,7 +528,7 @@ func _pierce(h: Dictionary, ab: Dictionary, e: Dictionary) -> void:
 	var dmg: int = int((ab["power"] + d["atk"]) * randf_range(0.95, 1.15) * (1.6 if crit else 1.0))
 	if crit:
 		_crit_fx(es.position)
-	await _damage_enemy(e, maxi(dmg, 1))
+	await _damage_enemy(e, maxi(dmg, 1), true)
 	await _sprint(h, h["home"], 0.22)
 
 ## Serenas Klingentanz: fünf Blitzschritte im Pentagramm um das Ziel,

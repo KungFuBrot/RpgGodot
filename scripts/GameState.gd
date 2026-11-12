@@ -15,7 +15,47 @@ const ITEMS := {
 	"Potion": {"price": 20, "desc": "Restores 30 HP.", "hp": 30, "mp": 0},
 	"Ether": {"price": 35, "desc": "Restores 12 MP.", "hp": 0, "mp": 12},
 	"Elixir": {"price": 90, "desc": "Restores 100 HP.", "hp": 100, "mp": 0},
+	# Einziger Weg, Gefallene im Kampf zurückzuholen — Heilzauber und Tränke
+	# wirken auf Ohnmächtige nicht mehr.
+	"Revive": {"price": 60, "desc": "Revives a fallen ally at half HP.", "hp": 0, "mp": 0,
+		"revive": true},
 }
+
+## ---------- Schwierigkeit ----------
+## Stellschrauben für das Balancing (per AUTOBATTLE-Bot eingemessen, siehe
+## docs/optik-und-bosse-plan.md, Stufe 1). Die Grundwerte in ENEMIES bleiben
+## unangetastet; hier wird nur multipliziert.
+##   hp/atk   Faktor auf die (bereits dungeon-skalierten) Bosswerte
+##   actions  Aktionen pro Runde
+##   rage_at  LP-Anteil, unter dem die Wut-Phase beginnt
+##   rage_atk Angriffsfaktor in der Wut-Phase
+##   aoe      Angriffsfaktor des angekündigten Flächenangriffs
+##   ult      Angriffsfaktoren der beiden Ultimates
+##   gap      Runden Luft zwischen einem Großangriff und dem nächsten Aufladen
+const BOSS_TUNING := {
+	"boss":  {"hp": 1.25, "atk": 1.2, "actions": 2, "rage_at": 0.5, "rage_atk": 1.15, "aoe": 2.6, "ult": [2.6, 3.1], "gap": 2},
+	"boss2": {"hp": 1.6, "atk": 1.2, "actions": 2, "rage_at": 0.5, "rage_atk": 1.15, "aoe": 2.8, "ult": [2.8, 3.35], "gap": 2},
+	"boss3": {"hp": 2.6, "atk": 1.5, "actions": 2, "rage_at": 0.5, "rage_atk": 1.15, "aoe": 2.7, "ult": [2.7, 3.2], "gap": 2},
+	"boss4": {"hp": 2.6, "atk": 1.55, "actions": 2, "rage_at": 0.5, "rage_atk": 1.15, "aoe": 2.6, "ult": [2.6, 3.1], "gap": 2},
+}
+## Normale Gegner: leicht angehoben, damit auch der Weg zum Boss zehrt.
+const MOB_TUNING := {"hp": 1.15, "atk": 1.15}
+
+## Nur für Balancing-Läufe: env AUTOTUNE="hp=1.6,atk=1.1" überschreibt einzelne
+## Werte, damit sich Stellschrauben ohne Dateiänderung durchprobieren lassen.
+var tuning_override := {}
+
+func boss_tuning(id: String) -> Dictionary:
+	var base: Dictionary = BOSS_TUNING.get(id, BOSS_TUNING["boss"])
+	if tuning_override.is_empty():
+		return base
+	var out := base.duplicate(true)
+	for k: String in tuning_override:
+		if k == "ult":
+			out["ult"] = [float(tuning_override[k]), float(tuning_override[k]) * 1.2]
+		else:
+			out[k] = tuning_override[k]
+	return out
 
 # Bosse tragen "boss": true plus Inszenierungs-Daten (Thema, Musik, Texte).
 # "proj" gibt Fernkämpfern ihre Spezialattacke (sludge/smog/coin/page/hate),
@@ -224,7 +264,7 @@ func is_unlocked(flag: String) -> bool:
 	return get(flag)
 
 func reset_party() -> void:
-	inventory = {"Potion": 3, "Ether": 1}
+	inventory = {"Potion": 3, "Ether": 1, "Revive": 1}
 	party = [
 		{
 			"id": "serena", "name": "Helen", "class": "Swordfighter",
@@ -455,3 +495,51 @@ func party_alive() -> bool:
 func random_encounter(map_id: String) -> Array:
 	var groups: Array = ENCOUNTERS[map_id]
 	return groups[randi() % groups.size()]
+
+## ---------- Kampf-Schnappschuss ----------
+## Vor jedem Kampf wird der Stand gemerkt. Nach einer Niederlage geht es von
+## dort weiter (statt wie früher mit Stufe 1 in der Stadt): verbrauchte Items
+## kommen zurück, und jede*r steht mit mindestens halben LP/MP wieder auf.
+func snapshot() -> Dictionary:
+	return {"party": party.duplicate(true), "inventory": inventory.duplicate(true), "gold": gold}
+
+func restore(snap: Dictionary) -> void:
+	if snap.is_empty():
+		return
+	party = (snap["party"] as Array).duplicate(true)
+	inventory = (snap["inventory"] as Dictionary).duplicate(true)
+	gold = snap["gold"]
+	for m in party:
+		m["hp"] = maxi(m["hp"], int(m["max_hp"] * 0.5))
+		m["mp"] = maxi(m["mp"], int(m["max_mp"] * 0.5))
+
+## ---------- Balancing-Bot (AUTOBATTLE) ----------
+## Stellt die Gruppe so auf, wie sie erwartungsgemäß vor dem jeweiligen Boss
+## steht: Bosse in Reihenfolge, Stufe aus den EP eines normalen Durchlaufs
+## (rund fünf Zufallskämpfe je Dungeon plus die Boss-EP davor).
+const SIM_SETUP := {
+	"boss":  {"done": 0, "level": 3, "inv": {"Potion": 5, "Ether": 2, "Revive": 1}},
+	"boss2": {"done": 1, "level": 5, "inv": {"Potion": 6, "Ether": 3, "Revive": 2, "Elixir": 1}},
+	"boss3": {"done": 2, "level": 8, "inv": {"Potion": 6, "Ether": 4, "Revive": 2, "Elixir": 2}},
+	"boss4": {"done": 3, "level": 10, "inv": {"Potion": 6, "Ether": 4, "Revive": 3, "Elixir": 3}},
+}
+
+func sim_setup(boss_id: String, level_delta := 0) -> void:
+	var cfg: Dictionary = SIM_SETUP[boss_id]
+	var done: int = cfg["done"]
+	boss_defeated = done >= 1
+	boss2_defeated = done >= 2
+	boss3_defeated = done >= 3
+	boss4_defeated = false
+	debug_mode = false
+	reset_party()  # Grundwerte + Segnungen der bereits gefallenen Bosse
+	var target: int = maxi(int(cfg["level"]) + level_delta, 1)
+	for m in party:
+		var g: Dictionary = LEVEL_GROWTH.get(m["id"], LEVEL_GROWTH["serena"])
+		for i in target - 1:
+			m["level"] += 1
+			for k: String in g:
+				m[k] += g[k]
+		m["hp"] = m["max_hp"]
+		m["mp"] = m["max_mp"]
+	inventory = (cfg["inv"] as Dictionary).duplicate(true)

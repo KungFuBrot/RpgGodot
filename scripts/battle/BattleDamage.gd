@@ -9,7 +9,7 @@ extends BattleBossCine
 func _damage_hero(target: Dictionary, dmg: int) -> void:
 	# In Deckung: der Treffer wird stark abgefedert; das Schild blitzt auf.
 	if target.get("defending", false):
-		dmg = maxi(int(round(dmg * 0.4)), 1)
+		dmg = maxi(int(round(dmg * 0.35)), 1)
 		_float_text(target["sprite"].position + Vector2(0, -22), "Block!", Color(0.6, 0.85, 1.0))
 		_burst(target["sprite"].position + Vector2(-18, -8), Color(0.65, 0.88, 1.0), 10, 100)
 		if target.get("guard") != null and is_instance_valid(target["guard"]):
@@ -32,7 +32,34 @@ func _damage_hero(target: Dictionary, dmg: int) -> void:
 		var faint := create_tween()
 		faint.tween_property(target["sprite"], "modulate", Color(0.4, 0.4, 0.55, 0.6), 0.4)
 
-func _damage_enemy(e: Dictionary, dmg: int) -> void:
+## breaker = true: durchdringende Treffer (Focus Pierce, Plasma Lance) reißen
+## die Mauer des Hasses sofort ein, statt sie nur anzukratzen.
+func _damage_enemy(e: Dictionary, dmg: int, breaker := false) -> void:
+	# Mauer des Hasses: halbiert jeden Treffer, bis sie genug Schläge kassiert hat.
+	if int(e.get("wall", 0)) > 0:
+		if breaker:
+			e["wall"] = 0
+		else:
+			dmg = maxi(int(dmg * 0.5), 1)
+			e["wall"] = int(e["wall"]) - 1
+		if int(e["wall"]) <= 0:
+			_float_text(e["sprite"].position + Vector2(0, -90), "Wall shattered!", Color(1.0, 0.6, 0.5), 24)
+			_burst(e["sprite"].position, Color(1.0, 0.4, 0.3), 16, 170)
+		_refresh_boss_note(e)
+	# Goldschild: fängt Schaden ab, bis er aufgebraucht ist.
+	if int(e.get("shield", 0)) > 0:
+		var absorbed := mini(dmg, int(e["shield"]))
+		e["shield"] = int(e["shield"]) - absorbed
+		dmg -= absorbed
+		_float_text(e["sprite"].position + Vector2(0, -70), "Shield -%d" % absorbed, Color(1.0, 0.85, 0.3), 22)
+		if int(e["shield"]) <= 0:
+			_float_text(e["sprite"].position + Vector2(0, -100), "Shield broken!", Color(1.0, 0.95, 0.6), 24)
+			_burst(e["sprite"].position, Color(1.0, 0.85, 0.35), 18, 180)
+		_refresh_boss_note(e)
+		if dmg <= 0:
+			_shake(e["sprite"], 0.0)
+			await get_tree().create_timer(0.3).timeout
+			return
 	e["hp"] -= dmg
 	_float_text(e["sprite"].position + Vector2(0, -40 if e["is_boss"] else 0), str(dmg), Color(1, 1, 0.5))
 	# Bosse stehen bombenfest; normale Gegner werden nach links (von den Helden weg) geworfen.
@@ -69,7 +96,8 @@ func _damage_enemy(e: Dictionary, dmg: int) -> void:
 		await tw.finished
 		(e["sprite"] as Sprite2D).visible = false
 	else:
-		# Wut-Phase: unter 40% LP wird der Boss schneller wütend und stärker.
-		if e["is_boss"] and not e["enraged"] and e["hp"] < e["max_hp"] * 0.4:
+		# Wut-Phase: unter der Schwelle aus BOSS_TUNING wird der Boss stärker.
+		if e["is_boss"] and not e["enraged"] \
+				and e["hp"] < e["max_hp"] * float(GameState.boss_tuning(e["key"])["rage_at"]):
 			await _boss_enrage(e)
 		await get_tree().create_timer(0.35).timeout
