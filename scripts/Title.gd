@@ -32,6 +32,8 @@ const CREDIT_LINES := [
 	["(Redshrike), CC-BY 3.0; shadow after Clint Bellanger and", 14, "body"],
 	["horned mage after Ben Potter, both CC-BY-SA 3.0", 14, "body"],
 	["Tiles, props & particles", 16, "sec"],
+	["LPC terrain, trees & houses by Lanea Zimmerman (Sharm), castle tiles", 14, "body"],
+	["by Daniel Armstrong (HughSpectrum), CC-BY-SA 3.0 / GPL 3.0", 14, "body"],
 	["\"Dungeon Tileset II\" by 0x72, CC0", 14, "body"],
 	["\"Roguelike/RPG Pack\" and \"Particle Pack\" by Kenney, CC0", 14, "body"],
 	["Battle backdrops by Luis Zuno (ansimuz), CC0", 14, "body"],
@@ -54,6 +56,7 @@ var pad_label: Label
 var debug_label: Label
 var style_label: Label
 var backdrop_label: Label
+var terrain_label: Label
 var settings_index := 0
 var ui: CanvasLayer
 var _locked := false
@@ -374,6 +377,10 @@ func _build_ui() -> void:
 	backdrop_label.add_theme_font_size_override("font_size", 18)
 	backdrop_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	svb.add_child(backdrop_label)
+	terrain_label = Label.new()
+	terrain_label.add_theme_font_size_override("font_size", 18)
+	terrain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	svb.add_child(terrain_label)
 	var shint := Label.new()
 	shint.text = "↑↓: Select   ·   Z: Toggle   ·   X: Back"
 	shint.add_theme_font_size_override("font_size", 15)
@@ -444,6 +451,10 @@ func _refresh_settings_labels() -> void:
 	backdrop_label.text = "%sPainted battle backdrops:  %s" % [bcur, "ON" if GameState.backdrop_preview else "OFF"]
 	backdrop_label.add_theme_color_override("font_color",
 		Color(0.55, 1.0, 0.6) if GameState.backdrop_preview else Color(1.0, 0.55, 0.5))
+	var tcur := "> " if settings_index == 4 else "   "
+	terrain_label.text = "%sLPC terrain on the map:  %s" % [tcur, "ON" if GameState.terrain_preview else "OFF"]
+	terrain_label.add_theme_color_override("font_color",
+		Color(0.55, 1.0, 0.6) if GameState.terrain_preview else Color(1.0, 0.55, 0.5))
 
 func _label(text: String, size: int, color: Color, y: float) -> Label:
 	var l := Label.new()
@@ -483,7 +494,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("move_up") or event.is_action_pressed("move_down"):
 			AudioManager.play_sfx("menu")
 			var step := -1 if event.is_action_pressed("move_up") else 1
-			settings_index = (settings_index + step + 4) % 4
+			settings_index = (settings_index + step + 5) % 5
 			_refresh_settings_labels()
 		elif event.is_action_pressed("confirm"):
 			# Ausgewählte Einstellung umschalten (sofort angewendet + gespeichert)
@@ -494,8 +505,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				GameState.set_debug_mode(not GameState.debug_mode)
 			elif settings_index == 2:
 				GameState.set_lpc_preview(not GameState.lpc_preview)
-			else:
+			elif settings_index == 3:
 				GameState.set_backdrop_preview(not GameState.backdrop_preview)
+			else:
+				GameState.set_terrain_preview(not GameState.terrain_preview)
 			_refresh_settings_labels()
 		elif event.is_action_pressed("cancel"):
 			AudioManager.play_sfx("menu")

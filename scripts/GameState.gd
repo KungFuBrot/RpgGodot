@@ -211,9 +211,12 @@ var debug_mode := false  # schaltet alle Fähigkeiten und Dungeons frei — Stan
 var lpc_preview := true
 ## Gemalte Mehrebenen-Kulissen im Kampf (Stufe 3). Aus = alte Polygon-Kulisse.
 var backdrop_preview := true
+## LPC-Gelände im Feld (Stufe 4). Aus = alte 16-px-Kacheln mit kleinen Figuren.
+var terrain_preview := true
 
 func _ready() -> void:
 	_load_settings()
+	_apply_env_overrides()
 	reset_party()
 
 func _load_settings() -> void:
@@ -223,6 +226,14 @@ func _load_settings() -> void:
 		debug_mode = cfg.get_value("debug", "enabled", false)
 		lpc_preview = cfg.get_value("style", "lpc_preview", true)
 		backdrop_preview = cfg.get_value("style", "backdrop_preview", true)
+		terrain_preview = cfg.get_value("style", "terrain_preview", true)
+
+## Nur für Prüfläufe: env CLASSIC_LOOK schaltet die neuen Kulissen und das
+## LPC-Gelände für diesen Start ab (ohne die gespeicherte Einstellung zu ändern).
+func _apply_env_overrides() -> void:
+	if OS.get_environment("CLASSIC_LOOK") != "":
+		backdrop_preview = false
+		terrain_preview = false
 
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -231,6 +242,7 @@ func _save_settings() -> void:
 	cfg.set_value("debug", "enabled", debug_mode)
 	cfg.set_value("style", "lpc_preview", lpc_preview)
 	cfg.set_value("style", "backdrop_preview", backdrop_preview)
+	cfg.set_value("style", "terrain_preview", terrain_preview)
 	cfg.save("user://settings.cfg")
 
 func set_touch_pad(value: bool) -> void:
@@ -251,6 +263,10 @@ func set_lpc_preview(value: bool) -> void:
 
 func set_backdrop_preview(value: bool) -> void:
 	backdrop_preview = value
+	_save_settings()
+
+func set_terrain_preview(value: bool) -> void:
+	terrain_preview = value
 	_save_settings()
 
 ## Kompletter Neustart (nach dem Abspann): alles zurück auf Anfang.

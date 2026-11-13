@@ -156,6 +156,21 @@ hit/down/cheer (im Feld zusätzlich `_up`/`_down` als Blickrichtung), Kreaturen
 idle/attack/hit/down/taunt, Bosse zusätzlich roar. Der Kampf setzt sie über
 `_pose` (Helden) bzw. `_epose` (Gegner); `_sprint` schaltet auf "run".
 
+### LPC-Gelände im Feld (`scripts/sprites/LpcTerrain.gd`, `Field._build_tiles_lpc`)
+
+Standard seit Stufe 4 (`GameState.terrain_preview`, abschaltbar im Titelmenü;
+für Prüfläufe schaltet env `CLASSIC_LOOK=1` Gelände und Kulissen ab).
+`TILE` bleibt 16 Welt-Einheiten; LPC-Kacheln (32 px) werden auf 0.5
+gezeichnet, die Kamera zoomt 4-fach, Figuren stehen auf 0.25 — überall sind
+zwei Bildschirmpixel ein Kunstpixel. Übergänge (Weg, Wasser) setzt
+`LpcTerrain.quarters` aus Viertelkacheln zusammen. Figuren, Bäume und Häuser
+liegen auf z 5 und werden nach y sortiert (`y_sort_enabled`); Kronen vor der
+Heldin werden durchscheinend (`_lpc_fade_canopies`). Dungeons nutzen
+Burgboden/-mauern, je Thema eingefärbt (`LPC_TINT`). Portal-Symbole und
+Story-Requisiten sind noch alte 16-px-Grafik (`LPC_KEEP_OBJECTS`).
+
+Alles Folgende beschreibt den alten Aufbau (Schalter aus).
+
 ### Gelände-Übergänge (`SpriteFactoryLib.edge_overlay`)
 
 Karten werden nicht mehr aus Vollkacheln gestapelt: `TERRAIN_RANK` legt fest,

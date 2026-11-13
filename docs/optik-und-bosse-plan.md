@@ -8,7 +8,7 @@
 | 1 Fordernde Kämpfe | fertig, live — Messwerte unten |
 | 2 Lebendigere Kampffiguren | fertig, live — Figuren-Shader (Trefferblitz, Kantenlicht, Zielumriss, Atmen für Einzelbild-Gegner), Angriffs-/Zauberposen laufen einmal sauber durch, Gegner-Aufstellung passt zur LPC-Größe |
 | 3 Kampfkulissen | fertig, live — gemalte CC0-Ebenen (Luis Zuno/ansimuz) für Schlotwerk, Konzernturm, Hassfestung, per Shader auf die Arenafarben umgefärbt, echtes Parallax; Die Leere bleibt prozedural. Schalter: Titel → Settings → „Painted battle backdrops" |
-| 4 Feld-Umgebungen | offen (dort auch Pixel-Snap, aus Stufe 0 verschoben) |
+| 4 Feld-Umgebungen | fertig, live — LPC-Gelände (Gras, Wege, Wasser, Klippen), echte Bäume und Häuser, Burgkacheln in den Dungeons, pixelgenauer Maßstab (Kamera 4x, Figuren 1:1), Tiefensortierung, durchscheinende Kronen. Schalter: Titel → Settings → „LPC terrain on the map". Offen für Stufe 5: Portal-Symbole und Story-Requisiten sind noch alte 16-px-Grafik |
 | 5 Leben in der Welt | offen |
 | 6 Oberfläche und Übergänge | offen |
 | 7 Abschluss | offen |

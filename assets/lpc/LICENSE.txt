@@ -28,9 +28,25 @@ monsters/pumpking.png         Charles Sanchez (CharlesGabriel)
 monsters/slime.png            Charles Sanchez (CharlesGabriel)
 monsters/snake.png            Charles Sanchez (CharlesGabriel)
 
+terrain/grass.png             Lanea Zimmerman (Sharm)
+terrain/dirt.png              Lanea Zimmerman (Sharm)
+terrain/water.png             Lanea Zimmerman (Sharm)
+terrain/treetop.png           Lanea Zimmerman (Sharm)
+terrain/trunk.png             Lanea Zimmerman (Sharm)
+terrain/house.png             Lanea Zimmerman (Sharm)
+terrain/mountains.png         Lanea Zimmerman (Sharm)
+terrain/bridges.png           Lanea Zimmerman (Sharm)
+terrain/castlefloors.png      Daniel Armstrong (HughSpectrum)
+terrain/castlewalls.png       Daniel Armstrong (HughSpectrum)
+
+Die Gelaendeblaetter liegen unveraendert vor. Im Spiel werden sie zur Laufzeit
+zugeschnitten, zu Uebergaengen zusammengesetzt und (Burgkacheln) je Dungeon
+eingefaerbt — siehe scripts/sprites/LpcTerrain.gd und scripts/Field.gd.
+
 Namensnennung im vorgeschriebenen Format:
-"Liberated Pixel Cup Base Assets" von Stephen Challener (Redshrike) und
-Charles Sanchez (CharlesGabriel), lizenziert CC-BY-SA 3.0 / GPL 3.0:
+"Liberated Pixel Cup Base Assets" von Stephen Challener (Redshrike),
+Charles Sanchez (CharlesGabriel), Lanea Zimmerman (Sharm) und Daniel Armstrong
+(HughSpectrum), lizenziert CC-BY-SA 3.0 / GPL 3.0:
 https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
 mit Dank an OpenGameArt.org
 

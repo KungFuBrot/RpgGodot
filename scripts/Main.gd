@@ -65,9 +65,17 @@ func _shot_tour() -> void:
 	goto_map("town", "start")
 	await get_tree().create_timer(2.0).timeout
 	_snap("town")
+	# Stadtmitte mit den Häusern (der Startpunkt liegt am Südrand).
+	goto_map("town", "", Vector2i(9, 5))
+	await get_tree().create_timer(2.0).timeout
+	_snap("town_houses")
 	goto_map("world", "from_town")
 	await get_tree().create_timer(2.0).timeout
 	_snap("world")
+	# Ostseite der Weltkarte: Fluss, Portale, Gebirge.
+	goto_map("world", "", Vector2i(16, 9))
+	await get_tree().create_timer(2.0).timeout
+	_snap("world_east")
 	goto_map("dungeon", "entrance")
 	await get_tree().create_timer(2.0).timeout
 	_snap("dungeon")

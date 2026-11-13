@@ -26,7 +26,7 @@ const MAPS := {
 		"ground": "grass",
 		"rows": [
 			"tttttttttttttttttttt",
-			"tggggggggggggggggggt",
+			"tttttttttttttttttttt",
 			"tgRRRRRgggggRRRRRggt",
 			"tgWWDWWgggggWWDWWggt",
 			"tggggggggggggggggggt",

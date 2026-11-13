@@ -12,7 +12,9 @@ const STEP_TIME := 0.18
 # jetzt etwas größer, gut anderthalb Kacheln hoch wie in klassischen JRPGs.
 # Der Versatz wird aus dem Maßstab abgeleitet, damit die Füße unabhängig davon
 # auf dem Kachelboden stehen und die Figur mittig über der Kachel sitzt.
-const FIELD_CHAR_SCALE := 0.42 / RigFactory.BAKE
+# (Variable statt Konstante: im LPC-Gelände gilt ein anderer, pixelgenauer
+# Maßstab — siehe _ready.)
+var FIELD_CHAR_SCALE: float = 0.42 / RigFactory.BAKE
 # Halbe Sprite-Breite und volle Höhe der gebackenen Figur — daraus ergibt sich
 # der Versatz, damit die Füße auf dem Kachelboden stehen und die Figur mittig
 # über der Kachel sitzt, unabhängig vom Maßstab.
@@ -21,11 +23,28 @@ const SPR_H := RigFactory.HERO_H * RigFactory.BAKE
 ## Waagerecht die KACHELMITTE (TILE/2), nicht 6 px — mit dem alten Wert stand
 ## jede Figur zwei Pixel links neben der Mitte und damit sichtbar auf der
 ## Kachelkante statt im Feld.
-const CHAR_OFFSET := Vector2(TILE * 0.5 / FIELD_CHAR_SCALE - SPR_HALF_W,
-	16.0 / FIELD_CHAR_SCALE - SPR_H)
+var CHAR_OFFSET := Vector2.ZERO  # wird in _ready aus dem Maßstab berechnet
 
 # Verkleinerung des thronenden Bosses auf der Karte.
-const FIELD_BOSS_SCALE := 0.30 / RigFactory.BAKE
+var FIELD_BOSS_SCALE: float = 0.30 / RigFactory.BAKE
+
+## LPC-Gelände (Stufe 4): Kacheln, Bäume und Häuser aus dem LPC-Basisset,
+## Kamera 4-fach, Figuren im Maßstab 0.25 — ein Kunstpixel sind dann überall
+## genau zwei Bildschirmpixel. Abschaltbar über GameState.terrain_preview.
+var lpc_ground := false
+var _lpc_water_mat: ShaderMaterial
+var _lpc_canopies: Array = []  # [{top, rect, base_y}] — Kronen, die vor der Gruppe durchscheinen
+# Zeichen, an die ein Weg optisch anschließt (Türen, Portale, Brücken).
+const LPC_PATHY := ["p", "b", "D", "T", "C", "F", "H", "V", "X"]
+# Felsgelände der Weltkarte (Portale im Gebirge stehen auf Fels).
+const LPC_ROCK := ["m", "C", "F"]
+# Objekte, die vorerst ihr altes Symbol behalten.
+const LPC_KEEP_OBJECTS := ["b", "T", "C", "F", "H", "V", "X"]
+# Einfärbung der Burg-Kacheln je Dungeon (Grundgelände der Karte).
+const LPC_TINT := {
+	"floor": Color(0.62, 0.88, 0.58), "ice": Color(1.0, 0.92, 0.70),
+	"hfloor": Color(1.0, 0.62, 0.56), "void": Color(0.62, 0.64, 0.78),
+}
 
 # Feld-Bosse: welcher Boss in welchem Dungeon thront (bis sein Flag gesetzt ist).
 const FIELD_BOSSES := {
@@ -113,6 +132,15 @@ const NEIGHBOR_DIRS := [Vector2i(0, -1), Vector2i(1, -1), Vector2i(1, 0), Vector
 func _ready() -> void:
 	add_child(Fx.glow_environment())
 	map = MapData.get_map(map_id)
+	lpc_ground = GameState.terrain_preview and LpcMock.active() and LpcTerrain.available()
+	if lpc_ground:
+		FIELD_CHAR_SCALE = 0.25
+		FIELD_BOSS_SCALE = 0.25
+		# Figuren, Bäume und Häuser teilen sich eine Zeichenebene und werden
+		# nach ihrer y-Lage sortiert: wer weiter unten steht, verdeckt.
+		y_sort_enabled = true
+	CHAR_OFFSET = Vector2(TILE * 0.5 / FIELD_CHAR_SCALE - SPR_HALF_W,
+		16.0 / FIELD_CHAR_SCALE - SPR_H)
 	_build_tiles()
 	_spawn_npcs()
 	_spawn_party()
@@ -356,6 +384,9 @@ func _add_cloud_shadows() -> void:
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _build_tiles() -> void:
+	if lpc_ground:
+		_build_tiles_lpc()
+		return
 	var rows: Array = map["rows"]
 	for y in rows.size():
 		var row: String = rows[y]
@@ -802,7 +833,7 @@ func _spawn_npcs() -> void:
 		s.centered = false
 		s.offset = _char_offset(s.texture)
 		s.scale = Vector2(FIELD_CHAR_SCALE, FIELD_CHAR_SCALE)
-		s.position = Vector2(npc["pos"].x * TILE + 2, npc["pos"].y * TILE)
+		s.position = Vector2(npc["pos"].x * TILE + (0 if lpc_ground else 2), npc["pos"].y * TILE)
 		s.z_index = 5
 		add_child(s)
 		_attach_drop_shadow(s)
@@ -878,30 +909,35 @@ func _spawn_party() -> void:
 	player.centered = false
 	player.offset = _char_offset(player.texture)
 	player.scale = Vector2(FIELD_CHAR_SCALE, FIELD_CHAR_SCALE)
-	player.z_index = 10
+	player.z_index = 5 if lpc_ground else 10
 	add_child(player)
 	_attach_drop_shadow(player)
 	follower = Sprite2D.new()
 	follower.centered = false
 	follower.offset = _char_offset(follower.texture)
 	follower.scale = Vector2(FIELD_CHAR_SCALE, FIELD_CHAR_SCALE)
-	follower.z_index = 9
+	follower.z_index = 5 if lpc_ground else 9
 	add_child(follower)
 	_attach_drop_shadow(follower)
 	follower2 = Sprite2D.new()
 	follower2.centered = false
 	follower2.offset = _char_offset(follower2.texture)
 	follower2.scale = Vector2(FIELD_CHAR_SCALE, FIELD_CHAR_SCALE)
-	follower2.z_index = 8
+	follower2.z_index = 5 if lpc_ground else 8
 	add_child(follower2)
 	_attach_drop_shadow(follower2)
 	player.position = _tile_pos(player_tile)
 	follower.position = _tile_pos(follower_tile)
 	follower2.position = _tile_pos(follower2_tile)
 	_update_sprites()
+	if lpc_ground:
+		# Bei gleicher y-Lage entscheidet die Reihenfolge der Knoten: die
+		# Heldin soll vor ihren Begleitern stehen, wenn alle auf einem Feld sind.
+		move_child(follower, get_child_count() - 1)
+		move_child(player, get_child_count() - 1)
 
 	camera = Camera2D.new()
-	camera.zoom = Vector2(3, 3)
+	camera.zoom = Vector2(4, 4) if lpc_ground else Vector2(3, 3)
 	var rows: Array = map["rows"]
 	camera.limit_left = 0
 	camera.limit_top = 0
@@ -914,7 +950,7 @@ func _spawn_party() -> void:
 	camera.make_current()
 
 func _tile_pos(t: Vector2i) -> Vector2:
-	return Vector2(t.x * TILE + 2, t.y * TILE)
+	return Vector2(t.x * TILE + (0 if lpc_ground else 2), t.y * TILE)
 
 ## Weicher Bodenschatten unter einer 12x16-Figur (verankert sie optisch).
 func _attach_drop_shadow(s: Sprite2D) -> void:
@@ -1006,6 +1042,8 @@ func _update_sprites() -> void:
 	follower2.flip_h = fd2n == "side" and fd2.x < 0
 
 func _process(delta: float) -> void:
+	if lpc_ground:
+		_lpc_fade_canopies(delta)
 	# Weiterlaufende Idle-/Lauf-Animation (4 Frames, ~7 fps).
 	anim_accum += delta
 	if anim_accum >= 0.14:
@@ -1258,3 +1296,171 @@ func _close_shop() -> void:
 	shop_panel.visible = false
 	state = "move"
 	AudioManager.play_sfx("menu")
+
+## ---------- LPC-Gelände (Stufe 4) ----------
+
+func _build_tiles_lpc() -> void:
+	var rows: Array = map["rows"]
+	var outdoor: bool = map.get("ground", "grass") == "grass"
+	for y in rows.size():
+		var row: String = rows[y]
+		for x in row.length():
+			var ch := row[x]
+			if outdoor:
+				_lpc_outdoor_cell(ch, x, y)
+			else:
+				_lpc_dungeon_cell(ch, x, y)
+			if ch == "t":
+				_lpc_tree(x, y)
+			elif (ch == "W" or ch == "D") and not (_char_at(x - 1, y) in ["W", "D"]):
+				_lpc_house(x, y)
+			elif ch in LPC_KEEP_OBJECTS:
+				_place_map_object(ch, x, y)
+	_add_plague_signs()
+
+## Ein Sprite aus einem LPC-Blatt (halber Maßstab, oben links verankert).
+func _lpc_sprite(tex: Texture2D, pos: Vector2, z: int, parent: Node = null) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = tex
+	s.centered = false
+	s.scale = Vector2(LpcTerrain.S, LpcTerrain.S)
+	s.position = pos
+	s.z_index = z
+	if parent == null:
+		add_child(s)
+	else:
+		parent.add_child(s)
+	return s
+
+## Gilt die Nachbarzelle als dasselbe Gelände? Außerhalb der Karte läuft es
+## weiter — so enden Wege und Flüsse nicht mit einer Kante am Kartenrand.
+func _lpc_same(x: int, y: int, kinds: Array) -> bool:
+	var c := _char_at(x, y)
+	return c == "" or kinds.has(c)
+
+## Wiese überall, darauf Weg, Wasser oder Fels.
+func _lpc_outdoor_cell(ch: String, x: int, y: int) -> void:
+	var pos := Vector2(x * TILE, y * TILE)
+	_lpc_sprite(LpcTerrain.fill("grass", _tile_noise(x, y)), pos, -3)
+	if ch == "p":
+		_lpc_auto("dirt", x, y, LPC_PATHY, false)
+	elif ch == "w" or ch == "b":
+		_lpc_auto("water", x, y, ["w", "b"], true)
+	elif LPC_ROCK.has(ch):
+		_lpc_cliff(x, y)
+
+## Gelände mit ausgefransten Rändern aus vier Viertelkacheln.
+func _lpc_auto(sheet: String, x: int, y: int, kinds: Array, watery: bool) -> void:
+	var q: Array = LpcTerrain.quarters(sheet,
+		_lpc_same(x, y - 1, kinds), _lpc_same(x + 1, y, kinds),
+		_lpc_same(x, y + 1, kinds), _lpc_same(x - 1, y, kinds),
+		_lpc_same(x + 1, y - 1, kinds), _lpc_same(x + 1, y + 1, kinds),
+		_lpc_same(x - 1, y + 1, kinds), _lpc_same(x - 1, y - 1, kinds))
+	for i in 4:
+		var s := _lpc_sprite(q[i], Vector2(x * TILE + (i % 2) * 8, y * TILE + int(i / 2) * 8), -2)
+		if watery:
+			if _lpc_water_mat == null:
+				_lpc_water_mat = Fx.water_material()
+			s.material = _lpc_water_mat
+			water_tiles.append(s)
+
+func _lpc_is_rock(x: int, y: int) -> bool:
+	var c := _char_at(x, y)
+	return c == "" or LPC_ROCK.has(c)
+
+## Fels als Hochfläche: oben die begehbar wirkende Kuppe, zur Wiese hin fällt
+## eine zwei Kacheln hohe Klippe ab.
+func _lpc_cliff(x: int, y: int) -> void:
+	var t := Vector2i(6, 1)  # Kuppe
+	if not _lpc_is_rock(x, y + 1):
+		# unterste Felsreihe: Klippenwand (mit Kante, wenn nichts darüber liegt)
+		t = Vector2i(6, 3) if _lpc_is_rock(x, y - 1) else Vector2i(6, 2)
+	elif not _lpc_is_rock(x, y + 2):
+		t = Vector2i(6, 2)   # Abbruchkante über der Wand
+	_lpc_sprite(LpcTerrain.tile("mountains", t.x, t.y), Vector2(x * TILE, y * TILE), -2)
+
+## LPC-Baum: Stamm mit Schattenfleck und Krone darüber, drei Kacheln breit.
+## Der Fußpunkt bestimmt die Tiefensortierung — Figuren weiter oben
+## verschwinden hinter der Krone, Figuren weiter unten stehen davor.
+func _lpc_tree(x: int, y: int) -> void:
+	var rows: Array = map["rows"]
+	var n := _tile_noise(x, y)
+	var kind := int(n * 13.0) % 2
+	var conifer := fposmod(n * 7.31, 1.0) > 0.62
+	var holder := Node2D.new()
+	# Bäume der untersten Kartenreihe wurzeln unter dem Kartenrand: sonst
+	# verdeckten ihre Kronen die begehbaren Reihen davor.
+	var sink := 58.0 if y == rows.size() - 1 else 0.0
+	holder.position = Vector2(x * TILE + 8 + (n - 0.5) * 5.0, y * TILE + sink)
+	holder.z_index = 5
+	add_child(holder)
+	_lpc_sprite(LpcTerrain.cut("trunk", kind * 96, 0, 96, 96), Vector2(-24, -23), 0, holder)
+	var top: Sprite2D
+	var top_h := 64.0
+	if conifer:
+		top = _lpc_sprite(LpcTerrain.cut("treetop", kind * 96, 96, 96, 128), Vector2(-24, -62), 0, holder)
+	else:
+		top = _lpc_sprite(LpcTerrain.cut("treetop", kind * 96, 0, 96, 96), Vector2(-24, -50), 0, holder)
+		top_h = 48.0
+	# Krone merken: steht die Gruppe dahinter, wird sie durchscheinend.
+	_lpc_canopies.append({"top": top, "base_y": holder.position.y,
+		"rect": Rect2(holder.position + top.position + Vector2(8, 4), Vector2(32, top_h - 14))})
+
+## Kronen, hinter denen die Heldin gerade steht, werden durchscheinend — sonst
+## verschwindet die Gruppe hinter jedem Baum.
+func _lpc_fade_canopies(delta: float) -> void:
+	if not is_instance_valid(player):
+		return
+	var body := player.position + Vector2(8, 2)
+	for c: Dictionary in _lpc_canopies:
+		var top: Sprite2D = c["top"]
+		var hidden: bool = float(c["base_y"]) > player.position.y and (c["rect"] as Rect2).has_point(body)
+		top.modulate.a = move_toward(top.modulate.a, 0.38 if hidden else 1.0, delta * 4.0)
+
+## Haus über einer Wandreihe (W/D): zwei Kacheln hohe Backsteinwand mit Tür
+## und Fenstern, darüber ein Schieferdach. Die Grundfläche bleibt die Kartenreihe.
+func _lpc_house(x0: int, y: int) -> void:
+	var w := 0
+	while _char_at(x0 + w, y) in ["W", "D"]:
+		w += 1
+	var holder := Node2D.new()
+	holder.position = Vector2(x0 * TILE, y * TILE)
+	holder.z_index = 5
+	add_child(holder)
+	for i in w:
+		var col := 0 if i == 0 else (2 if i == w - 1 else 1)
+		_lpc_sprite(LpcTerrain.tile("house", col, 0), Vector2(i * TILE, -16), 0, holder)
+		_lpc_sprite(LpcTerrain.tile("house", col, 2), Vector2(i * TILE, 0), 0, holder)
+	for i in w:
+		if _char_at(x0 + i, y) == "D":
+			_lpc_sprite(LpcTerrain.cut("house", 96, 0, 32, 48), Vector2(i * TILE, -8), 0, holder)
+		elif i > 0 and i < w - 1 and i % 2 == 1:
+			_lpc_sprite(LpcTerrain.tile("house", 7, 0), Vector2(i * TILE, -13), 0, holder)
+	for i in w:
+		var rc := 3 if i == 0 else (5 if i == w - 1 else 4)
+		_lpc_sprite(LpcTerrain.tile("house", rc, 3), Vector2(i * TILE, -44), 0, holder)
+		_lpc_sprite(LpcTerrain.tile("house", rc, 6), Vector2(i * TILE, -28), 0, holder)
+
+## Dungeon: Burgboden und -mauern aus dem LPC-Set, je Thema eingefärbt.
+func _lpc_dungeon_cell(ch: String, x: int, y: int) -> void:
+	var tint: Color = LPC_TINT.get(map.get("ground", "floor"), Color.WHITE)
+	var pos := Vector2(x * TILE, y * TILE)
+	var n := _tile_noise(x, y)
+	if WALL_CHARS.has(ch):
+		var v := _wall_variant(ch, x, y)
+		var t := Vector2i(2, 1)          # dunkle Mauermasse
+		var shade := 0.55
+		if v == "wall_crown":
+			t = Vector2i(3, 6)
+			shade = 0.85
+		elif v != "wall_deep":
+			t = Vector2i(0, 8)           # Mauerfront zum Boden hin
+			shade = 1.0
+		var ws := _lpc_sprite(LpcTerrain.tile("castlewalls", t.x, t.y), pos, -2)
+		ws.modulate = Color(tint.r * shade, tint.g * shade, tint.b * shade)
+		return
+	# Eine ruhige Pflasterkachel, nur selten eine Variante — mehrere im Wechsel
+	# ergaben ein unruhiges Flickenmuster.
+	var pick := Vector2i(5, 5) if n < 0.86 else Vector2i(6, 7)
+	var fs := _lpc_sprite(LpcTerrain.tile("castlefloors", pick.x, pick.y), pos, -3)
+	fs.modulate = tint
