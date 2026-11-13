@@ -2,38 +2,27 @@
 
 > Hobbyprojekt. **Im Browser spielen:** https://kungfubrot.github.io/RpgGodot/
 
-Ein Mini-JRPG im Stil von *Final Fantasy VI / Octopath Traveler*, gebaut mit **Godot 4.3+**.
-Alles ist prozedural: Pixel-Art, Karten, Musik und Soundeffekte werden zur Laufzeit
-per GDScript erzeugt — das Projekt braucht **keine einzigen Binär-Assets**.
+Ein Mini-JRPG im Stil von *Final Fantasy VI / Octopath Traveler*, gebaut mit **Godot 4**.
+Aufbau, Karten, Effekte, Oberfläche und ein Teil der Musik entstehen per Code; Figuren,
+Gelände und Kampfkulissen stammen aus freien Grafiksets (siehe Credits).
 
 ## Ausführen
 
 ### 1. Godot installieren (einmalig)
 
-Benötigt wird **Godot 4.3 oder neuer** (Standard-Version, kein .NET nötig). Am einfachsten unter Windows per winget:
+Benötigt wird **Godot 4.3 oder neuer** (Standard-Version, kein .NET nötig). Unter Windows:
 
 ```powershell
 winget install GodotEngine.GodotEngine
 ```
 
-Danach ein **neues** Terminal öffnen, damit der Befehl `godot` verfügbar ist.
-(Alternativ von [godotengine.org/download](https://godotengine.org/download) laden — Godot ist eine portable EXE ohne Installer.)
-
 ### 2. Spiel starten
-
-**Direkt per Kommandozeile** (im Ordner oberhalb von `RpgGodot/`):
 
 ```powershell
 godot --path RpgGodot
 ```
 
-**Oder über den Editor:**
-
-1. Godot starten → **Importieren** → die Datei `RpgGodot/project.godot` auswählen.
-2. **F5** drücken (Hauptszene `scenes/Main.tscn` ist bereits eingestellt).
-
-> Hinweis: Beim ersten Betreten eines Bereichs wird dessen Musik einmalig
-> gerendert — ein kurzer Moment Rechenzeit ist normal.
+Oder im Editor `RpgGodot/project.godot` importieren und **F5** drücken.
 
 ## Steuerung
 
@@ -41,45 +30,52 @@ godot --path RpgGodot
 |---|---|
 | Pfeiltasten / WASD | Bewegen bzw. Menü-Auswahl |
 | Z / Enter / Leertaste | Bestätigen, Ansprechen, Kaufen |
-| X / Escape | Abbrechen, Shop verlassen |
+| X / Escape | Abbrechen, zurück |
+
+Auf Geräten ohne Tastatur erscheint ein Bildschirm-Pad.
 
 ## Inhalt
 
-- **Stadt Lindenhain** — sicher, keine Kämpfe. Zwei ansprechbare NPCs
-  (Ältester Theobald, Pia) und **Händlerin Greta** mit Shop (Trank, Äther).
-- **Weltkarte** — verbindet Stadt (Westen) und Höhle (Osten), Fluss mit Brücke.
-- **Finsterhöhle (Dungeon)** — mit **Zufallskämpfen** (Schleim, Höhlenfledermaus, Skelett).
-- **Bosskampf**: Tief in der Höhle thront der **Knochenkönig** — ansprechen (Z) startet
-  den Kampf. Eigenes Boss-Theme, dramatischer Auftritt mit Banner und Kamerabeben,
-  alle drei Runden beschwört er den **Knochensturm** (trifft die ganze Gruppe).
-  Einmal besiegt, bleibt er besiegt.
-- **Zwei Helden mit je zwei Fähigkeiten**:
-  - **Serena** (Schwertkämpferin) — *Klingenwirbel* (trifft alle Gegner, 4 MP),
-    *Fokusstoß* (drei schnelle Hiebe, ignoriert Verteidigung, 3 MP)
-  - **Milo** (Zauberer) — *Feuerball* (starker Einzelziel-Zauber, 5 MP),
-    *Heillicht* (heilt einen Verbündeten, 4 MP)
-- **Rundenbasierte Kämpfe** mit Kommandos: Angriff, Fähigkeit (Untermenü), Item, Fliehen.
-- **Animationen**: Einmarsch der Kämpfer, Idle-Wippen, Ausfallschritte, Schwerthieb-Effekt
-  mit Funkenflug, Feuerball-Projektil mit Explosion, Heil-Lichtring, Aufladen der Gegner
-  vor dem Angriff, Treffer-Shake + Kamera-Wackeln, Vollbild-Blitze, pulsierender
-  Zielcursor, schwebende Schadenszahlen, Sterbe- und Sieg-Animationen mit Münzregen,
-  Kampf-Blitz-Übergang.
-- **Musik & SFX**: prozeduraler Chiptune-Synth — eigene Themes für Stadt, Weltkarte,
-  Dungeon, Kampf, Sieg und Niederlage; Sounds für Schritte, Menü, Kauf, Hieb,
-  Feuer, Explosion, Heilung u. v. m.
+- **Lindenhain** — das Dorf: Ältester Theobald, Pia und Händlerin Greta (Potion, Ether,
+  Elixir, Revive).
+- **Weltkarte** — verbindet das Dorf mit vier Dungeons.
+- **Drei Plagen, in beliebiger Reihenfolge:** Schlotwerk (Smokestack Baron),
+  Konzernturm (Monopoly Prince), Hassfestung (The Divider). Jeder Sieg stärkt die Gruppe
+  und löst Fähigkeiten-Siegel; die noch offenen Dungeons wachsen mit.
+- **Die Leere** — öffnet sich nach allen drei Plagen (The Silence).
+- **Drei Helden:** Helen (Schwertkämpferin), Janosch (Magier, Heilung, Beschwörungen),
+  Finni (Kampfroboter, Reparatur, schwere Waffen).
 
-## Architektur (erweiterbar)
+### Kämpfe
 
-| Datei | Zweck |
-|---|---|
-| `scripts/Main.gd` | Szenenwechsel Feld ↔ Kampf, Überblendungen, Input-Setup |
-| `scripts/GameState.gd` (Autoload) | Party, Gold, Inventar, Item-/Gegner-Daten |
-| `scripts/AudioManager.gd` (Autoload) | Chiptune-Synth für Musik & SFX |
-| `scripts/MapData.gd` | ASCII-Karten inkl. Portale, NPCs, Spawns |
-| `scripts/Field.gd` | Erkundung: Bewegung, Dialoge, Shop, Zufallskämpfe |
-| `scripts/Battle.gd` | Rundenkampf inkl. aller Effekte |
-| `scripts/SpriteFactory.gd` | Prozedurale Pixel-Art (Tiles, Helden, Gegner) |
+Rundenbasiert: Attack, Ability, Defend, Item, Flee. Die Bosse verlangen Taktik:
 
-**Bewusst offen gelassen für später** (wie gewünscht): Story/Ziel, Level-/EP-System
-(einfach in `GameState.party` + `_victory()` einhängen), weitere Karten (nur ein
-Eintrag in `MapData.MAPS`), weitere Gegner/Items (Einträge in `GameState`).
+- Sie handeln zweimal pro Runde und **kündigen Großangriffe eine Runde vorher an** —
+  wer dann nicht verteidigt, steckt den vollen Schlag ein.
+- **Defend** dämpft Treffer stark und gibt etwas MP zurück.
+- Jeder Boss hat einen eigenen Kniff: Gift, MP-Steuer und Goldschild, Mauer des Hasses
+  und Isolation, Schweigen und Verstärkung.
+- Gefallene holt nur ein **Revive** zurück. Nach einer Niederlage geht es mit dem Stand
+  von vor dem Kampf weiter.
+
+## Einstellungen (Titelmenü → Settings)
+
+Bildschirm-Pad, Debug-Modus (alles freigeschaltet) und drei Grafik-Schalter, mit denen
+sich der frühere Look zum Vergleich zurückholen lässt: LPC-Figuren, gemalte Kampfkulissen,
+LPC-Gelände.
+
+## Für Entwickler
+
+Architektur, Konventionen und Prüfbefehle stehen in [CLAUDE.md](CLAUDE.md), der Verlauf
+des Grafik- und Balancing-Umbaus in [docs/optik-und-bosse-plan.md](docs/optik-und-bosse-plan.md).
+
+## Credits
+
+Vollständig im Spiel (Titelmenü → Credits) und in den `LICENSE.txt` der Asset-Ordner.
+
+- Figuren, Gelände, Häuser: Liberated Pixel Cup (Stephen Challener, Charles Sanchez,
+  Lanea Zimmerman, Daniel Armstrong u. a.), CC-BY-SA 3.0 / GPL 3.0
+- Kampfkulissen: Luis Zuno (ansimuz), CC0
+- Kacheln, Requisiten, Partikel: 0x72 (Dungeon Tileset II) und Kenney, CC0
+- Musik: Juhani Junkala (JRPG Music Packs), CC0; Klänge: Kenney, artisticdude, CC0
+- Schrift: DotGothic16 (Fontworks Inc.), SIL OFL 1.1

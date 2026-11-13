@@ -5,8 +5,10 @@ GitHub Pages. Aufbau, Karten, Effekte und UI entstehen per Code — es gibt nur
 eine Szene (`Main.tscn`), keine Editor-Ressourcen. Figuren kommen aus
 LPC-Blättern (`assets/lpc/`), Kacheln und Partikel aus DTII und Kenney.
 
-**Laufender Umbau:** Optik-Aufwertung und fordernde Bosse in Stufen 0–7, siehe
-`docs/optik-und-bosse-plan.md` (Stand der Stufen steht dort ganz oben).
+**Abgeschlossen (2026-11-13):** Optik-Aufwertung und fordernde Bosse in den
+Stufen 0–7, siehe `docs/optik-und-bosse-plan.md` (Stand, Messwerte und offene
+Reste stehen dort ganz oben). Der alte Look bleibt über drei Schalter im
+Titelmenü erreichbar (LPC-Figuren, gemalte Kulissen, LPC-Gelände).
 
 ## Konventionen
 

@@ -16,17 +16,15 @@ Volle Autorenliste der Originalveroeffentlichung: CREDITS-LPC-original.txt
 Genutzte Dateien und ihre Urheber
 ---------------------------------
 
-people/female_walkcycle.png   Stephen Challener (Redshrike)
-people/female_slash.png       Stephen Challener (Redshrike)
-people/female_spellcast.png   Stephen Challener (Redshrike)
-people/female_hurt.png        Stephen Challener (Redshrike)
-
-monsters/bat.png              Charles Sanchez (CharlesGabriel)
-monsters/eyeball.png          Charles Sanchez (CharlesGabriel)
-monsters/ghost.png            Charles Sanchez (CharlesGabriel)
-monsters/pumpking.png         Charles Sanchez (CharlesGabriel)
-monsters/slime.png            Charles Sanchez (CharlesGabriel)
-monsters/snake.png            Charles Sanchez (CharlesGabriel)
+Koerpervorlagen (Grundlage der Heldenblaetter in heroes/):
+  female_walkcycle, female_slash, female_spellcast, female_hurt
+                              Stephen Challener (Redshrike)
+Kreaturen (Grundlage einzelner Gegnerstreifen in enemies/):
+  bat, eyeball, ghost, pumpking, slime, snake
+                              Charles Sanchez (CharlesGabriel)
+(Die unveraenderten Originaldateien lagen bis 2026-11-13 als people/ und
+monsters/ im Repo; kein Skript griff darauf zu, sie wurden entfernt. Quelle
+siehe oben.)
 
 terrain/grass.png             Lanea Zimmerman (Sharm)
 terrain/dirt.png              Lanea Zimmerman (Sharm)
@@ -86,9 +84,9 @@ Vorgenommene Aenderungen
 
 Stand 2026-08-04:
 
-- assets/lpc/people/ und assets/lpc/monsters/: unveraendert im Original. Das
-  Spiel schneidet zur Laufzeit Einzelbilder heraus (AtlasTexture) und skaliert
-  sie — das veraendert die Dateien nicht.
+- assets/lpc/terrain/: unveraendert im Original. Das Spiel schneidet zur
+  Laufzeit Einzelbilder heraus (AtlasTexture) und skaliert sie — das veraendert
+  die Dateien nicht.
 
 - assets/lpc/heroes/serena_*.png und milo_*.png: BEARBEITET. Aus den oben
   genannten Generator-Ebenen uebereinandergelegt und eingefaerbt — Hose und
