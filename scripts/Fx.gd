@@ -380,3 +380,41 @@ static func backdrop_material(dark: Color, mid: Color, light: Color, fog: Color,
 	m.set_shader_parameter("depth", depth)
 	m.set_shader_parameter("gain", gain)
 	return m
+
+# ---------- Wind in den Baumkronen (Feld) ----------
+# Die Krone wiegt sich in ganzen Kunstpixeln: oben weiter als unten, jeder
+# Baum leicht versetzt (Phase aus seiner Lage). Kein Strecken, kein Weichzeichnen.
+const SWAY_SHADER_CODE := "
+shader_type canvas_item;
+uniform float texel = 1.0;
+uniform float strength = 1.6;
+uniform float speed = 1.1;
+varying float v_y;
+varying float v_phase;
+varying vec4 v_col;
+
+void vertex() {
+	v_y = VERTEX.y > 0.5 ? 1.0 : 0.0;
+	v_phase = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).x * 0.045;
+	v_col = COLOR;
+}
+
+void fragment() {
+	float lift = 1.0 - v_y;
+	float wave = sin(TIME * speed + v_phase) + 0.35 * sin(TIME * speed * 2.7 + v_phase * 1.7);
+	float shift = floor(wave * strength * lift + 0.5);
+	vec2 uv = UV + vec2(shift * TEXTURE_PIXEL_SIZE.x * texel, 0.0);
+	COLOR = texture(TEXTURE, uv) * v_col;
+}
+"
+
+static var _sway_material: ShaderMaterial
+
+## Ein gemeinsames Material für alle Kronen (die Phase kommt aus der Lage).
+static func sway_material() -> ShaderMaterial:
+	if _sway_material == null:
+		var sh := Shader.new()
+		sh.code = SWAY_SHADER_CODE
+		_sway_material = ShaderMaterial.new()
+		_sway_material.shader = sh
+	return _sway_material

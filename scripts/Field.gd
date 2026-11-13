@@ -79,6 +79,7 @@ var follower2: Sprite2D       # zweiter Begleiter (Roboter Rax)
 var follower2_tile: Vector2i
 var camera: Camera2D
 var npc_nodes := {}  # Vector2i -> npc dict
+var npc_sprites: Array = []  # [{s, id, pos}] — damit sich Dorfbewohner zur Gruppe drehen können
 var water_tiles: Array = []  # Wasser-Sprites (für die Gift-Tönung der Plage 1)
 
 # UI
@@ -838,6 +839,7 @@ func _spawn_npcs() -> void:
 		add_child(s)
 		_attach_drop_shadow(s)
 		npc_nodes[npc["pos"]] = npc
+		npc_sprites.append({"s": s, "id": npc["id"], "pos": npc["pos"]})
 	# Boss thront hinten im Dungeon, bis er besiegt ist.
 	if FIELD_BOSSES.has(map_id):
 		var cfg: Dictionary = FIELD_BOSSES[map_id]
@@ -1046,8 +1048,15 @@ func _process(delta: float) -> void:
 		_lpc_fade_canopies(delta)
 	# Weiterlaufende Idle-/Lauf-Animation (4 Frames, ~7 fps).
 	anim_accum += delta
-	if anim_accum >= 0.14:
-		anim_accum -= 0.14
+	# Im LPC-Gelände taktet das Gehen passend zur Schrittweite (sonst gleiten
+	# die Füße über den Boden), das Atmen im Stand dagegen ganz ruhig.
+	var tick := 0.14
+	if lpc_ground:
+		tick = 0.075 if moving else 0.5
+	if anim_accum >= tick:
+		anim_accum = 0.0
+		if lpc_ground:
+			_npcs_face_player()
 		# 18 = gemeinsames Vielfaches von Gehen (9 Bilder) und Stehen (2 Bilder)
 		# der LPC-Blaetter; mit 16 sprang der Gehzyklus beim Umlauf.
 		anim_frame = (anim_frame + 1) % 18
@@ -1097,7 +1106,8 @@ func _try_step(dir: Vector2i) -> void:
 	_update_sprites()
 	AudioManager.play_sfx("step")
 	_step_dust(_tile_pos(old) + Vector2(8, 15))
-	_step_squash(player)
+	if not lpc_ground:
+		_step_squash(player)  # die LPC-Gehbilder federn selbst
 	# Die Kamera schaut ein Stück in Laufrichtung voraus, statt starr auf der
 	# Figur zu kleben — das nimmt der Bewegung die Steifheit.
 	if is_instance_valid(camera):
@@ -1315,8 +1325,11 @@ func _build_tiles_lpc() -> void:
 			elif (ch == "W" or ch == "D") and not (_char_at(x - 1, y) in ["W", "D"]):
 				_lpc_house(x, y)
 			elif ch in LPC_KEEP_OBJECTS:
-				_place_map_object(ch, x, y)
+				if not _lpc_portal(ch, x, y):
+					_place_map_object(ch, x, y)
 	_add_plague_signs()
+	if outdoor:
+		_lpc_butterflies()
 
 ## Ein Sprite aus einem LPC-Blatt (halber Maßstab, oben links verankert).
 func _lpc_sprite(tex: Texture2D, pos: Vector2, z: int, parent: Node = null) -> Sprite2D:
@@ -1402,9 +1415,10 @@ func _lpc_tree(x: int, y: int) -> void:
 	else:
 		top = _lpc_sprite(LpcTerrain.cut("treetop", kind * 96, 0, 96, 96), Vector2(-24, -50), 0, holder)
 		top_h = 48.0
+	top.material = Fx.sway_material()
 	# Krone merken: steht die Gruppe dahinter, wird sie durchscheinend.
 	_lpc_canopies.append({"top": top, "base_y": holder.position.y,
-		"rect": Rect2(holder.position + top.position + Vector2(8, 4), Vector2(32, top_h - 14))})
+		"rect": Rect2(holder.position + top.position + Vector2(2, 2), Vector2(44, top_h - 6))})
 
 ## Kronen, hinter denen die Heldin gerade steht, werden durchscheinend — sonst
 ## verschwindet die Gruppe hinter jedem Baum.
@@ -1440,6 +1454,11 @@ func _lpc_house(x0: int, y: int) -> void:
 		var rc := 3 if i == 0 else (5 if i == w - 1 else 4)
 		_lpc_sprite(LpcTerrain.tile("house", rc, 3), Vector2(i * TILE, -44), 0, holder)
 		_lpc_sprite(LpcTerrain.tile("house", rc, 6), Vector2(i * TILE, -28), 0, holder)
+	# Schornstein mit dünner Rauchfahne — das Dorf ist bewohnt.
+	if w >= 3:
+		var cx := (w - 1) * TILE - 6.0
+		_lpc_sprite(LpcTerrain.cut("house", 192, 8, 32, 48), Vector2(cx, -58), 0, holder)
+		_smoke_plume(holder.position + Vector2(cx + 8, -58), Color(0.86, 0.86, 0.9, 0.38))
 
 ## Dungeon: Burgboden und -mauern aus dem LPC-Set, je Thema eingefärbt.
 func _lpc_dungeon_cell(ch: String, x: int, y: int) -> void:
@@ -1464,3 +1483,87 @@ func _lpc_dungeon_cell(ch: String, x: int, y: int) -> void:
 	var pick := Vector2i(5, 5) if n < 0.86 else Vector2i(6, 7)
 	var fs := _lpc_sprite(LpcTerrain.tile("castlefloors", pick.x, pick.y), pos, -3)
 	fs.modulate = tint
+
+## ---------- Leben in der Welt (Stufe 5) ----------
+
+## Dorfbewohner in der Nähe drehen sich zur Heldin und atmen mit.
+func _npcs_face_player() -> void:
+	for n: Dictionary in npc_sprites:
+		var s: Sprite2D = n["s"]
+		if not is_instance_valid(s):
+			continue
+		var d: Vector2i = player_tile - (n["pos"] as Vector2i)
+		var dir := "down"
+		var flip := false
+		if absi(d.x) + absi(d.y) <= 4:
+			if absi(d.x) > absi(d.y):
+				dir = "side"
+				flip = d.x < 0
+			elif d.y < 0:
+				dir = "up"
+		s.texture = SpriteFactory.character(n["id"], dir, anim_frame)
+		s.flip_h = flip
+
+## Portale als Teil der Landschaft statt als Symbolkachel: die Stadt ist ein
+## Häuschen, Schlotwerk und Konzernturm sind Stollen in der Klippe, die
+## Hassfestung ein Burgtor. Rückgabe false = altes Symbol benutzen.
+func _lpc_portal(ch: String, x: int, y: int) -> bool:
+	var pos := Vector2(x * TILE, y * TILE)
+	match ch:
+		"T":
+			var holder := Node2D.new()
+			holder.position = pos + Vector2(-TILE, 0)
+			holder.z_index = 5
+			add_child(holder)
+			for i in 3:
+				_lpc_sprite(LpcTerrain.tile("house", i, 0), Vector2(i * TILE, -16), 0, holder)
+				_lpc_sprite(LpcTerrain.tile("house", i, 2), Vector2(i * TILE, 0), 0, holder)
+				_lpc_sprite(LpcTerrain.tile("house", 3 + i, 3), Vector2(i * TILE, -44), 0, holder)
+				_lpc_sprite(LpcTerrain.tile("house", 3 + i, 6), Vector2(i * TILE, -28), 0, holder)
+			_lpc_sprite(LpcTerrain.cut("house", 96, 0, 32, 48), Vector2(TILE, -8), 0, holder)
+			return true
+		"C", "F":
+			var cave := _lpc_sprite(LpcTerrain.cut("mountains", 32, 160, 64, 64),
+				pos + Vector2(-8, -16), -1)
+			cave.modulate = Color(0.78, 1.0, 0.72) if ch == "C" else Color(1.0, 0.9, 0.62)
+			return true
+		"H":
+			var gate := _lpc_sprite(LpcTerrain.cut("castlewalls", 128, 192, 64, 96),
+				pos + Vector2(-8, -32), -1)
+			gate.modulate = Color(1.0, 0.72, 0.68)
+			return true
+	return false
+
+## Ein paar Schmetterlinge über der Wiese — winzig, aber sie nehmen der Karte
+## das Standbildhafte.
+func _lpc_butterflies() -> void:
+	var rows: Array = map["rows"]
+	var w: float = (rows[0] as String).length() * TILE
+	var h: float = rows.size() * TILE
+	var img := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	img.fill(Color.WHITE)
+	var tex := ImageTexture.create_from_image(img)
+	var tints := [Color(1.0, 0.95, 0.55), Color(1.0, 0.7, 0.8), Color(0.75, 0.9, 1.0), Color(1, 1, 1)]
+	for i in 7:
+		var b := Sprite2D.new()
+		b.texture = tex
+		b.modulate = tints[i % tints.size()]
+		b.position = Vector2(randf_range(24, w - 24), randf_range(40, h - 40))
+		b.z_index = 6
+		add_child(b)
+		var flap := b.create_tween().set_loops()
+		flap.tween_property(b, "scale:x", 0.3, 0.11)
+		flap.tween_property(b, "scale:x", 1.0, 0.11)
+		_butterfly_hop(b, w, h)
+
+func _butterfly_hop(b: Sprite2D, w: float, h: float) -> void:
+	if not is_instance_valid(b):
+		return
+	var to := b.position + Vector2(randf_range(-26, 26), randf_range(-18, 18))
+	to.x = clampf(to.x, 16, w - 16)
+	to.y = clampf(to.y, 24, h - 24)
+	var tw := b.create_tween()
+	tw.tween_property(b, "position", to, randf_range(0.9, 1.8)) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_interval(randf_range(0.0, 0.8))
+	tw.tween_callback(_butterfly_hop.bind(b, w, h))
