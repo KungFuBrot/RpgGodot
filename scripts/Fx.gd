@@ -418,3 +418,125 @@ static func sway_material() -> ShaderMaterial:
 		_sway_material = ShaderMaterial.new()
 		_sway_material.shader = sh
 	return _sway_material
+
+# ---------- Oberfläche (Stufe 6) ----------
+
+static var _ui_font: Font
+static var _panel_tex := {}
+
+## Pixelschrift für die ganze Oberfläche (DotGothic16, SIL OFL 1.1) — die
+## klassische JRPG-Textschrift; lateinische Zeichen sind gleich breit, die
+## Symbole der Spieltexte (Sterne, Rauten, Pfeile) bringt sie selbst mit.
+## Was ihr fehlt, kommt weiter aus der Standardschrift der Engine.
+static func ui_font() -> Font:
+	if _ui_font == null:
+		var p := "res://assets/fonts/DotGothic16.ttf"
+		if ResourceLoader.exists(p):
+			var f: FontFile = load(p)
+			# Ligaturen aus: die Verbindung "fi" dieser Schrift liest sich wie ein
+			# anderer Buchstabe ("fire" sah aus wie "Are").
+			var ts := TextServerManager.get_primary_interface()
+			if ts != null:
+				f.opentype_feature_overrides = {
+					ts.name_to_tag("liga"): 0, ts.name_to_tag("clig"): 0,
+					ts.name_to_tag("dlig"): 0, ts.name_to_tag("calt"): 0}
+			var fb: Font = ThemeDB.fallback_font
+			if fb != null and fb != f:
+				f.fallbacks = [fb]
+			_ui_font = f
+	return _ui_font
+
+## Einmal beim Start: Schrift und Fensterrahmen als Standard für alle
+## Bedienelemente setzen — die Oberfläche entsteht überall per Code, so greift
+## es ohne Änderung an jeder einzelnen Stelle.
+static func install_ui_theme() -> void:
+	var th := ThemeDB.get_default_theme()
+	var f := ui_font()
+	if th == null:
+		return
+	if f != null:
+		var old: Font = th.default_font
+		if old != null and old != f and f is FontFile:
+			(f as FontFile).fallbacks = [old]
+		th.default_font = f
+	th.set_stylebox("panel", "PanelContainer", panel_style())
+
+## Fensterrahmen im Pixel-Look: dunkles Feld, doppelte Goldkante, Ecknieten.
+## Wird als 9-Patch gestreckt; "alpha" steuert die Deckkraft des Feldes.
+static func panel_style(alpha := 0.94, margin := 14) -> StyleBoxTexture:
+	var key := "%.2f" % alpha
+	if not _panel_tex.has(key):
+		var n := 48
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		var fill_top := Color(0.09, 0.10, 0.22, alpha)
+		var fill_bot := Color(0.04, 0.04, 0.11, alpha)
+		var edge_dark := Color(0.02, 0.02, 0.05, 1.0)
+		var gold := Color(0.86, 0.74, 0.42, 1.0)
+		var gold_dim := Color(0.45, 0.36, 0.18, 1.0)
+		for y in n:
+			for x in n:
+				var d: int = mini(mini(x, y), mini(n - 1 - x, n - 1 - y))  # Abstand zum Rand
+				var c := fill_top.lerp(fill_bot, float(y) / float(n - 1))
+				if d < 2:
+					c = edge_dark
+				elif d < 4:
+					c = gold
+				elif d < 6:
+					c = gold_dim
+				img.set_pixel(x, y, c)
+		# Ecknieten: helle Quadrate auf den vier Ecken, eine Spur Glanz oben links.
+		for corner: Vector2i in [Vector2i(0, 0), Vector2i(n - 10, 0), Vector2i(0, n - 10), Vector2i(n - 10, n - 10)]:
+			for y in 10:
+				for x in 10:
+					var edge: bool = x < 2 or y < 2 or x > 7 or y > 7
+					var c2 := edge_dark if edge else gold
+					if not edge and x < 4 and y < 4:
+						c2 = Color(1.0, 0.95, 0.72, 1.0)
+					elif not edge and (x > 5 or y > 5):
+						c2 = gold_dim
+					img.set_pixel(corner.x + x, corner.y + y, c2)
+		_panel_tex[key] = ImageTexture.create_from_image(img)
+	var sb := StyleBoxTexture.new()
+	sb.texture = _panel_tex[key]
+	sb.set_texture_margin_all(12)
+	sb.set_content_margin_all(margin)
+	return sb
+
+# Blenden: 1 = Iris (Kreis schließt sich zur Mitte), 2 = Rautenraster, das
+# diagonal über das Bild läuft. progress 0 = offen, 1 = ganz zu.
+const WIPE_SHADER_CODE := "
+shader_type canvas_item;
+uniform float progress : hint_range(0.0, 1.0) = 0.0;
+uniform int mode = 1;
+uniform vec2 center = vec2(0.5, 0.5);
+
+void fragment() {
+	float a = 0.0;
+	if (mode == 1) {
+		vec2 d = (UV - center) * vec2(16.0 / 9.0, 1.0);
+		// in groben Stufen, damit der Rand pixelig bleibt
+		d = floor(d * 135.0) / 135.0;
+		a = step((1.0 - progress) * 1.25, length(d));
+	} else {
+		vec2 grid = vec2(24.0, 13.5);
+		vec2 cell = floor(UV * grid);
+		vec2 f = fract(UV * grid) - 0.5;
+		float delay = (cell.x + cell.y) / (grid.x + grid.y) * 0.6;
+		float local = clamp((progress - delay) / 0.4, 0.0, 1.0);
+		a = step(abs(f.x) + abs(f.y), local * 1.02);
+	}
+	COLOR = vec4(0.0, 0.0, 0.0, a);
+}
+"
+
+static var _wipe_shader: Shader
+
+static func wipe_material(mode: int) -> ShaderMaterial:
+	if _wipe_shader == null:
+		_wipe_shader = Shader.new()
+		_wipe_shader.code = WIPE_SHADER_CODE
+	var m := ShaderMaterial.new()
+	m.shader = _wipe_shader
+	m.set_shader_parameter("mode", mode)
+	m.set_shader_parameter("progress", 0.0)
+	return m

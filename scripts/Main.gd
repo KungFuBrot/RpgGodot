@@ -13,6 +13,7 @@ var battle_snapshot := {}  # Stand vor dem Kampf — nach einer Niederlage geht 
 
 func _ready() -> void:
 	GameState.main = self
+	Fx.install_ui_theme()  # Pixelschrift + Fensterrahmen für alles, was folgt
 	_setup_input()
 	var layer := CanvasLayer.new()
 	layer.layer = 100
@@ -36,7 +37,7 @@ func _ready() -> void:
 	if OS.get_environment("AUTOBATTLE") != "":
 		_auto_series()
 		return
-	if OS.get_environment("SPELLSHOT") != "":
+	if OS.get_environment("SPELLSHOT") != "" or OS.get_environment("MENUSHOT") != "":
 		goto_map("town", "start")
 		await get_tree().create_timer(0.5).timeout
 		start_battle(["schlammschleim", "qualmgeist", "muellgnom"], "dungeon", Vector2i(4, 10))
@@ -69,6 +70,13 @@ func _shot_tour() -> void:
 	goto_map("town", "", Vector2i(9, 5))
 	await get_tree().create_timer(2.0).timeout
 	_snap("town_houses")
+	# Dialogfenster: vor den Ältesten stellen und ansprechen.
+	goto_map("town", "", Vector2i(7, 5))
+	await get_tree().create_timer(1.6).timeout
+	(current_screen as Field).facing = Vector2i(0, -1)
+	(current_screen as Field)._try_interact()
+	await get_tree().create_timer(1.4).timeout
+	_snap("dialog")
 	goto_map("world", "from_town")
 	await get_tree().create_timer(2.0).timeout
 	_snap("world")
@@ -125,7 +133,7 @@ func _snap(shot_name: String) -> void:
 	img.save_png(OS.get_environment("SHOT") + "/" + shot_name + ".png")
 
 func goto_map(map_id: String, spawn_id: String, exact_pos := Vector2i(-1, -1)) -> void:
-	await _fade(1.0, 0.25)
+	await _wipe(1, true, 0.3)
 	_clear_screen()
 	var field := Field.new()
 	field.map_id = map_id
@@ -134,7 +142,7 @@ func goto_map(map_id: String, spawn_id: String, exact_pos := Vector2i(-1, -1)) -
 	add_child(field)
 	current_screen = field
 	AudioManager.play_music(map_id)
-	await _fade(0.0, 0.35)
+	await _wipe(1, false, 0.4)
 
 func start_battle(enemy_ids: Array, from_map: String, pos: Vector2i) -> void:
 	field_return = {"map": from_map, "spawn": "", "pos": pos}
@@ -147,7 +155,7 @@ func start_battle(enemy_ids: Array, from_map: String, pos: Vector2i) -> void:
 		await _fade(0.8, 0.07)
 		await _fade(0.0, 0.07)
 	fade_rect.color = Color.BLACK
-	await _fade(1.0, 0.25)
+	await _wipe(2, true, 0.5)
 	_clear_screen()
 	var battle := Battle.new()
 	battle.enemy_ids = enemy_ids
@@ -161,7 +169,7 @@ func start_battle(enemy_ids: Array, from_map: String, pos: Vector2i) -> void:
 	for id in enemy_ids:
 		song = GameState.ENEMIES[id].get("song", song)
 	AudioManager.play_music(song)
-	await _fade(0.0, 0.35)
+	await _wipe(2, false, 0.45)
 
 func _on_battle_finished(victory: bool) -> void:
 	if not victory:
@@ -320,3 +328,20 @@ func _auto_one(id: String, bot: String) -> Dictionary:
 			left = clampf(float(e["hp"]) / float(e["max_hp"]), 0.0, 1.0)
 	return {"win": outcome["win"], "rounds": battle.round_no, "standing": standing,
 		"stuck": not outcome["done"], "boss_left": left}
+
+## Blende mit Form statt bloßem Schwarzfaden: kind 1 = Iris (Kartenwechsel),
+## 2 = Rautenraster (Kampfbeginn). closing = zuziehen, sonst aufziehen.
+## Davor und danach steht fade_rect wieder als schlichtes Schwarz bereit, damit
+## die übrigen Überblendungen (_fade) unverändert funktionieren.
+func _wipe(kind: int, closing: bool, dur: float) -> void:
+	var mat := Fx.wipe_material(kind)
+	fade_rect.color = Color.BLACK
+	fade_rect.material = mat
+	fade_rect.modulate.a = 1.0
+	var from := 0.0 if closing else 1.0
+	mat.set_shader_parameter("progress", from)
+	var tw := create_tween()
+	tw.tween_method(func(v: float): mat.set_shader_parameter("progress", v), from, 1.0 - from, dur)
+	await tw.finished
+	fade_rect.material = null
+	fade_rect.modulate.a = 1.0 if closing else 0.0

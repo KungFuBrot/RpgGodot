@@ -32,24 +32,18 @@ func _build_ui() -> void:
 	var panel := PanelContainer.new()
 	panel.position = Vector2(20, 378)
 	panel.custom_minimum_size = Vector2(920, 148)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.05, 0.12, 0.94)
-	style.border_color = Color(0.75, 0.7, 0.5)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
-	style.set_content_margin_all(10)
-	style.shadow_color = Color(0, 0, 0, 0.5)
-	style.shadow_size = 8
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", Fx.panel_style(0.95, 12))
 	layer.add_child(panel)
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 40)
+	hb.add_theme_constant_override("separation", 22)
 	panel.add_child(hb)
 	# Menü in einem ScrollContainer: bei vielen Einträgen (z. B. Milos volle
 	# Fähigkeitenliste) rollt der Ausschnitt mit, damit die Auswahl immer
 	# sichtbar bleibt statt unten aus dem Panel zu laufen.
 	menu_scroll_c = ScrollContainer.new()
-	menu_scroll_c.custom_minimum_size = Vector2(300, 126)
+	# Feste Breite: lange Einträge brechen um, statt die Party-Leiste nach
+	# rechts aus dem Bild zu schieben.
+	menu_scroll_c.custom_minimum_size = Vector2(478, 126)
 	menu_scroll_c.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	menu_scroll_c.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	# Weder Rahmen noch Scrollbalken dürfen Tastatur-Fokus greifen — sonst
@@ -58,7 +52,7 @@ func _build_ui() -> void:
 	menu_scroll_c.get_v_scroll_bar().focus_mode = Control.FOCUS_NONE
 	hb.add_child(menu_scroll_c)
 	menu_box = VBoxContainer.new()
-	menu_box.custom_minimum_size = Vector2(280, 0)
+	menu_box.custom_minimum_size = Vector2(462, 0)
 	menu_scroll_c.add_child(menu_box)
 	party_box = VBoxContainer.new()
 	party_box.add_theme_constant_override("separation", 5)
@@ -267,7 +261,7 @@ func _tick_status(h: Dictionary) -> void:
 func _refresh_party() -> void:
 	for h in heroes:
 		var d: Dictionary = h["data"]
-		h["hp_label"].text = "%-7s Lv%2d  HP %3d/%3d  MP %2d/%2d%s" % \
+		h["hp_label"].text = "%-7s Lv%2d HP %3d/%3d MP %2d/%2d%s" % \
 			[d["name"], d.get("level", 1), d["hp"], d["max_hp"], d["mp"], d["max_mp"],
 			_status_tags(h)]
 		h["hp_label"].add_theme_color_override("font_color",
@@ -414,7 +408,9 @@ func _build_menu_rows() -> void:
 	menu_rows = []
 	for i in current_menu.size():
 		var l := Label.new()
-		l.add_theme_font_size_override("font_size", 19)
+		l.add_theme_font_size_override("font_size", 17)
+		l.custom_minimum_size = Vector2(462, 0)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		menu_box.add_child(l)
 		menu_rows.append(l)
 

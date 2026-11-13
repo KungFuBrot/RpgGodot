@@ -87,6 +87,8 @@ var ui: CanvasLayer
 var dialog_panel: PanelContainer
 var dialog_name: Label
 var dialog_text: Label
+var dialog_portrait: TextureRect   # Gesicht der sprechenden Figur
+var dialog_typing: Tween           # läuft, solange der Text noch tippt
 var dialog_lines: Array = []
 var dialog_after_shop := false
 var shop_panel: PanelContainer
@@ -1132,6 +1134,7 @@ func _after_step() -> void:
 			if portal.has("locked_until") and not GameState.is_unlocked(portal["locked_until"]):
 				AudioManager.play_sfx("error")
 				dialog_name.text = portal.get("locked_name", "Barrier")
+				_set_dialog_portrait("")
 				dialog_lines = [portal["locked_msg"]]
 				dialog_after_shop = false
 				state = "dialogue"
@@ -1159,11 +1162,18 @@ func _try_interact() -> void:
 	dialog_lines = (npc["lines"] as Array).duplicate()
 	dialog_after_shop = npc.get("shop", false)
 	dialog_name.text = npc["name"]
+	_set_dialog_portrait(npc.get("id", ""))
 	state = "dialogue"
 	AudioManager.play_sfx("menu")
 	_advance_dialogue()
 
 func _advance_dialogue() -> void:
+	# Tippt der Text noch, zeigt die erste Bestätigung ihn ganz — erst die
+	# zweite blättert weiter.
+	if dialog_typing != null and dialog_typing.is_running():
+		dialog_typing.kill()
+		dialog_text.visible_ratio = 1.0
+		return
 	if dialog_lines.is_empty():
 		dialog_panel.visible = false
 		if dialog_after_shop:
@@ -1171,8 +1181,31 @@ func _advance_dialogue() -> void:
 		else:
 			state = "move"
 		return
-	dialog_panel.visible = true
+	if not dialog_panel.visible:
+		dialog_panel.visible = true
+		dialog_panel.modulate.a = 0.0
+		dialog_panel.create_tween().tween_property(dialog_panel, "modulate:a", 1.0, 0.14)
 	dialog_text.text = dialog_lines.pop_front()
+	# Schreibmaschine: der Satz baut sich Zeichen für Zeichen auf.
+	dialog_text.visible_ratio = 0.0
+	dialog_typing = create_tween()
+	dialog_typing.tween_property(dialog_text, "visible_ratio", 1.0,
+		clampf(dialog_text.text.length() * 0.016, 0.25, 1.6))
+
+## Gesicht der sprechenden Figur als Ausschnitt ihres Feldbilds; ohne Figur
+## (Schilder, Barrieren) bleibt der Platz leer und klappt zu.
+func _set_dialog_portrait(id: String) -> void:
+	dialog_portrait.visible = false
+	if id == "":
+		return
+	var tex := SpriteFactory.character(id, "down", 0) as AtlasTexture
+	if tex == null or tex.region.size.x < 100.0:
+		return
+	var face := AtlasTexture.new()
+	face.atlas = tex.atlas
+	face.region = Rect2(tex.region.position + Vector2(40, 24), Vector2(48, 44))
+	dialog_portrait.texture = face
+	dialog_portrait.visible = true
 
 ## ---------- UI ----------
 
@@ -1221,9 +1254,19 @@ func _build_ui() -> void:
 	ui.add_child(hud)
 	_refresh_hud()
 
-	dialog_panel = _make_panel(Rect2(80, 400, 800, 120))
+	dialog_panel = _make_panel(Rect2(80, 396, 800, 124))
+	var drow := HBoxContainer.new()
+	drow.add_theme_constant_override("separation", 14)
+	dialog_panel.add_child(drow)
+	dialog_portrait = TextureRect.new()
+	dialog_portrait.custom_minimum_size = Vector2(96, 88)
+	dialog_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	dialog_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	dialog_portrait.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	drow.add_child(dialog_portrait)
 	var vb := VBoxContainer.new()
-	dialog_panel.add_child(vb)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	drow.add_child(vb)
 	dialog_name = Label.new()
 	dialog_name.add_theme_font_size_override("font_size", 16)
 	dialog_name.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
@@ -1254,13 +1297,7 @@ func _make_panel(rect: Rect2) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.position = rect.position
 	p.custom_minimum_size = rect.size
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.16, 0.92)
-	style.border_color = Color(0.75, 0.7, 0.5)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(12)
-	p.add_theme_stylebox_override("panel", style)
+	p.add_theme_stylebox_override("panel", Fx.panel_style(0.94, 14))
 	p.visible = false
 	ui.add_child(p)
 	return p

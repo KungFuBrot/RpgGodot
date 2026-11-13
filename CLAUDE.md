@@ -67,6 +67,21 @@ Neue geteilte Helfer gehören nach `BattleFx` (visuell) bzw. `BattleBase` (Zusta
 - Nur schwebende Gegner (`BattleStage.FLOATERS`) und Bosse wippen noch;
   alle anderen stehen (`bob_amp` 0).
 
+### Oberfläche
+
+- `Fx.install_ui_theme()` (Aufruf in `Main._ready`) setzt die Pixelschrift
+  DotGothic16 (`assets/fonts`, SIL OFL) und den Fensterrahmen
+  `Fx.panel_style()` als Standard für alle Bedienelemente. Lateinische Zeichen
+  sind gleich breit — Breiten deshalb in Zeichen rechnen (Schriftgröße / 2 px
+  je Zeichen). Ligaturen sind abgeschaltet.
+- Dialog im Feld: Schreibmaschine (`dialog_typing`), Porträt aus dem Feldbild
+  (`_set_dialog_portrait`). Erste Bestätigung zeigt den Satz ganz, die zweite
+  blättert.
+- Blenden: `Main._wipe(kind, closing, dur)` — 1 Iris (Kartenwechsel),
+  2 Rautenraster (Kampf); `_fade` bleibt für Titel/Intro/Abspann.
+- Prüfbilder: `MENUSHOT` (Fähigkeiten-Menü), `CREDITSHOT=1` zusammen mit
+  `SHOT` (Credits-Tafel).
+
 ### Kampfkulissen (`BattleStage.BACKDROPS`)
 
 Je Arena-Thema eine Liste gemalter Ebenen aus `assets/backdrops/` (CC0, Luis

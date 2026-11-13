@@ -10,7 +10,7 @@
 | 3 Kampfkulissen | fertig, live — gemalte CC0-Ebenen (Luis Zuno/ansimuz) für Schlotwerk, Konzernturm, Hassfestung, per Shader auf die Arenafarben umgefärbt, echtes Parallax; Die Leere bleibt prozedural. Schalter: Titel → Settings → „Painted battle backdrops" |
 | 4 Feld-Umgebungen | fertig, live — LPC-Gelände (Gras, Wege, Wasser, Klippen), echte Bäume und Häuser, Burgkacheln in den Dungeons, pixelgenauer Maßstab (Kamera 4x, Figuren 1:1), Tiefensortierung, durchscheinende Kronen. Schalter: Titel → Settings → „LPC terrain on the map". Offen für Stufe 5: Portal-Symbole und Story-Requisiten sind noch alte 16-px-Grafik |
 | 5 Leben in der Welt | fertig, live — Gehbilder im Takt der Schrittweite, ruhiges Atmen im Stand, Dorfbewohner drehen sich zur Gruppe, Wind in den Kronen, Schmetterlinge, Schornsteinrauch; Portale als Häuschen, Stollen und Burgtor. Nicht umgesetzt: Tageszeit/Wetterwechsel, wandernde NPCs; Story-Requisiten (Pfändungstafeln, Zollschranken) sind weiter alte 16-px-Grafik |
-| 6 Oberfläche und Übergänge | offen |
+| 6 Oberfläche und Übergänge | fertig, live — Pixelschrift DotGothic16 für die ganze Oberfläche, Fensterrahmen im Pixel-Look, Dialog mit Schreibmaschine und Porträt, Iris-Blende beim Kartenwechsel, Rautenblende zum Kampf; Kampfmenü mit fester Breite, Credits passen wieder aufs Bild |
 | 7 Abschluss | offen |
 
 **Stufe 1, Abnahmemessung** (30 Bot-Läufe je Boss, erwartete Stufe):
